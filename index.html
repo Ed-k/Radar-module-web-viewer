@@ -1,0 +1,1205 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Radar Module Console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira+Semi+Condensed:wght@500;700&family=Atkinson+Hyperlegible:wght@400;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: instrument bench — "add a module" rail on top, one card per connected radar (view + readout, settings bench, byte log), wiring reference at the foot */
+:root{
+  --bg:#eef1f4; --panel:#ffffff; --ink:#18212b; --muted:#5b6876; --line:#d3dae2;
+  --approach:#c2410c; --recede:#0f766e; --accent:#1d4ed8; --scope:#f6f8fa; --grid:#c6cfd9;
+  --t1:#1d4ed8; --t2:#c2410c; --t3:#0f766e;
+  --ok:#15803d; --warn:#b45309; --bad:#b91c1c;
+  --f-display:"Saira Semi Condensed","Arial Narrow",system-ui,sans-serif;
+  --f-body:"Atkinson Hyperlegible",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0d131a; --panel:#141c25; --ink:#e3e9ef; --muted:#8b98a6; --line:#26323f;
+  --approach:#fb923c; --recede:#2dd4bf; --accent:#7aa2ff; --scope:#0a1017; --grid:#22303d;
+  --t1:#7aa2ff; --t2:#fb923c; --t3:#2dd4bf;
+  --ok:#4ade80; --warn:#fbbf24; --bad:#f87171; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0d131a; --panel:#141c25; --ink:#e3e9ef; --muted:#8b98a6; --line:#26323f;
+  --approach:#fb923c; --recede:#2dd4bf; --accent:#7aa2ff; --scope:#0a1017; --grid:#22303d;
+  --t1:#7aa2ff; --t2:#fb923c; --t3:#2dd4bf;
+  --ok:#4ade80; --warn:#fbbf24; --bad:#f87171; color-scheme:dark}
+*{box-sizing:border-box}
+html{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 var(--f-body);
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 40px}
+.wrap{max-width:1140px;margin:0 auto;display:grid;grid-template-columns:minmax(0,1fr);gap:16px}
+.wrap>*{min-width:0}
+header{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:8px}
+h1{font:700 1.7rem/1.1 var(--f-display);letter-spacing:.01em;margin:0;text-wrap:balance}
+h1 small{display:block;font:500 .85rem var(--f-mono);color:var(--muted);margin-top:4px}
+h2,h4{font:700 .76rem var(--f-display);text-transform:uppercase;letter-spacing:.12em;color:var(--muted);margin:0 0 8px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px}
+.row{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end}
+.row.between{justify-content:space-between;align-items:center}
+button,select,input{font:inherit;color:var(--ink)}
+button{background:var(--panel);border:1px solid var(--line);border-radius:7px;padding:7px 13px;cursor:pointer;font-weight:700;font-size:.9rem}
+button:hover:not(:disabled){border-color:var(--accent)}
+button.primary{background:var(--accent);border-color:var(--accent);color:var(--panel)}
+button:disabled{opacity:.45;cursor:not-allowed}
+button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+input[type=text],select{background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:6px 8px;min-width:0;width:100%}
+input.mono{font-family:var(--f-mono);font-size:.85rem}
+input[type=range]{width:100%}
+label{display:grid;gap:4px;font-size:.8rem;color:var(--muted)}
+label.inline{display:flex;align-items:center;gap:6px;color:var(--ink);font-size:.88rem}
+label.grow{flex:1;min-width:140px} label.w90{width:96px} label.w120{width:130px}
+.status{display:inline-flex;align-items:center;gap:8px;font:600 .82rem var(--f-mono);padding:4px 10px;border-radius:99px;border:1px solid var(--line)}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--muted)}
+.status[data-s=live] .dot{background:var(--ok)} .status[data-s=stale] .dot{background:var(--warn)} .status[data-s=error] .dot{background:var(--bad)}
+.note{font-size:.8rem;color:var(--muted);margin:6px 0 0}
+.note.warn{color:var(--warn)}
+details>summary{cursor:pointer;font-size:.85rem;color:var(--muted)}
+.adv{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-top:10px}
+.devices{display:grid;gap:16px}
+.card{display:grid;grid-template-columns:minmax(0,1fr);gap:16px}
+.card>*,.devices>*{min-width:0}
+.readout,.view,.group,.presence{grid-template-columns:minmax(0,1fr)}
+.devices{grid-template-columns:minmax(0,1fr)}
+.card-head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:10px;border-bottom:1px solid var(--line);padding-bottom:12px}
+.dev-name{font:700 1.3rem/1.1 var(--f-display);margin:0}
+.dev-sub{font:.8rem var(--f-mono);color:var(--muted);margin-top:3px}
+.rate{font:.78rem var(--f-mono);color:var(--muted);font-variant-numeric:tabular-nums}
+.picker{border:1px dashed var(--warn);border-radius:8px;padding:12px}
+.picker p{margin:0 0 8px;font-size:.88rem}
+.main{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:16px}
+@media (max-width:800px){.main{grid-template-columns:minmax(0,1fr)}}
+.view{min-width:0;display:grid;gap:10px;align-content:start}
+canvas{width:100%;height:auto;aspect-ratio:1.45;display:block;background:var(--scope);border-radius:8px;max-width:100%}
+.readout{display:grid;gap:14px;align-content:start;min-width:0}
+.big{display:flex;align-items:baseline;gap:8px}
+.big .n{font:700 3.8rem/1 var(--f-display);font-variant-numeric:tabular-nums}
+.big .u{font:500 1.05rem var(--f-mono);color:var(--muted)}
+.alarm{display:inline-flex;align-items:center;font:700 .78rem var(--f-display);letter-spacing:.1em;text-transform:uppercase;padding:4px 10px;border-radius:5px;border:1px solid var(--line);color:var(--muted)}
+.alarm.on{background:var(--approach);border-color:var(--approach);color:var(--panel)}
+.tablewrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;font-size:.86rem}
+th{font:700 .68rem var(--f-display);text-transform:uppercase;letter-spacing:.1em;color:var(--muted);text-align:right;padding:4px 6px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{text-align:right;padding:5px 6px;border-bottom:1px solid var(--line);font-family:var(--f-mono);white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+td input[type=text]{width:58px;padding:3px 5px;text-align:right}
+.scroll td,.scroll th{padding:4px}
+.dir-a{color:var(--approach);font-weight:600} .dir-r{color:var(--recede);font-weight:600}
+.empty{color:var(--muted);font-size:.86rem;margin:6px 0}
+.meta{display:flex;flex-wrap:wrap;gap:6px 14px;font:.8rem var(--f-mono);color:var(--muted)}
+dl.stats{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;margin:0;font-size:.86rem}
+dl.stats dt{color:var(--muted)} dl.stats dd{margin:0;font-family:var(--f-mono);text-align:right;font-variant-numeric:tabular-nums}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{font:600 .78rem var(--f-mono);padding:3px 9px;border-radius:99px;border:1px solid var(--line);color:var(--muted)}
+.chip.on{background:var(--approach);border-color:var(--approach);color:var(--panel)}
+.bench{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:16px;border-top:1px solid var(--line);padding-top:14px}
+.group{display:grid;gap:8px;align-content:start;min-width:0}
+.group h4{font:700 .92rem var(--f-display);text-transform:none;letter-spacing:0;color:var(--ink);margin:0}
+.scroll{max-height:260px;overflow:auto;border:1px solid var(--line);border-radius:6px}
+.presence{display:grid;gap:10px}
+.pstate{font:700 1.6rem/1.1 var(--f-display)}
+.pstate.on{color:var(--approach)}
+.distbar{height:10px;border-radius:5px;background:var(--grid);overflow:hidden}
+.distfill{height:100%;width:0;background:var(--approach);transition:width .2s}
+.distscale{display:flex;justify-content:space-between;font:.72rem var(--f-mono);color:var(--muted)}
+.legend{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:.78rem;color:var(--muted);align-items:center}
+.sw{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:-1px}
+.sw.m{background:var(--approach)} .sw.s{background:var(--recede)} .sw.t{background:var(--ink);height:2px;vertical-align:3px}
+.gates{display:flex;gap:3px;align-items:flex-end;overflow-x:auto;padding-bottom:2px}
+.gate{flex:1 0 16px;display:grid;gap:3px;min-width:16px}
+.gate .bars{position:relative;display:flex;gap:1px;align-items:flex-end;height:120px;background:var(--scope);border-radius:3px}
+.bar{flex:1;background:var(--approach);border-radius:2px 2px 0 0;min-height:1px}
+.bar.s{background:var(--recede)}
+.tick{position:absolute;left:0;width:50%;height:2px;background:var(--ink)}
+.tick.s{left:50%}
+.gate span{font:10px var(--f-mono);text-align:center;color:var(--muted)}
+.logbox{border-top:1px solid var(--line);padding-top:10px}
+.log{font:12px/1.55 var(--f-mono);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px;height:200px;overflow:auto;white-space:pre-wrap;word-break:break-all;margin:8px 0}
+.log .tx{color:var(--accent)} .log .rx{color:var(--recede)} .log .err{color:var(--bad)} .log .info{color:var(--muted)}
+.wiring td,.wiring th{white-space:normal;text-align:left;font-family:var(--f-body)}
+.wiring td:first-child{font-weight:700;white-space:nowrap}
+.warn-cell{color:var(--warn);font-weight:700}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Radar Module Console<small>HLK-LD2451 · HLK-LD2410D · Rd-03D V2 · HLK-LD6004</small></h1>
+  </header>
+
+  <section class="panel">
+    <h2>Add a module</h2>
+    <div class="row">
+      <label class="w120" style="width:220px">Model
+        <select id="model"></select>
+      </label>
+      <button class="primary" id="btnSerial">Connect USB serial</button>
+      <button id="btnBle">Connect Bluetooth</button>
+      <span style="flex:1"></span>
+      <label style="width:220px">Demo data
+        <select id="demoModel"></select>
+      </label>
+      <button id="btnDemo">Add demo</button>
+    </div>
+    <p class="note" id="support"></p>
+    <details>
+      <summary>Bluetooth settings (HLK-LD2451 only)</summary>
+      <div class="adv">
+        <label>Name filter (blank = show all)<input type="text" id="namePrefix" value="HLK" class="mono"></label>
+        <label>BLE service UUID<input type="text" id="svc" value="fff0" class="mono"></label>
+        <label>Notify characteristic (blank = auto)<input type="text" id="notifyUuid" placeholder="e.g. fff1" class="mono"></label>
+        <label>Write characteristic (blank = auto)<input type="text" id="writeUuid" placeholder="e.g. fff2" class="mono"></label>
+        <label>BLE password (Hi-Link default)<input type="text" id="blePass" value="HiLink" maxlength="6" class="mono"></label>
+        <label class="inline"><input type="checkbox" id="sendPass" checked> Send password after connecting</label>
+      </div>
+    </details>
+  </section>
+
+  <section class="devices" id="devices"></section>
+
+  <section class="panel" id="emptyState">
+    <h2>No modules connected</h2>
+    <p style="margin:0;max-width:65ch">Connect a radar over USB serial and leave the model on <b>Auto-detect</b>. The page listens to what the module is already sending, works out which model it is, and only then enables that model's settings. You can connect several modules; each gets its own card. To see what a module's card looks like first, add demo data.</p>
+  </section>
+
+  <details class="panel" open>
+    <summary><h2 style="display:inline">Wiring and power</h2></summary>
+    <div class="tablewrap" style="margin-top:10px">
+      <table class="wiring">
+        <thead><tr><th>Module</th><th>Baud</th><th>Power</th><th>Logic</th><th>Bluetooth</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td>HLK-LD2451</td><td>115200</td><td>5 V, 200 mA or more</td><td>3.3 V</td><td>Yes</td><td>Vehicles, 10–100 m</td></tr>
+          <tr><td>HLK-LD2410D</td><td>115200</td><td>3.3 V or 5 V</td><td>3.3 V</td><td>No</td><td>Two firmware protocols; the page detects which one</td></tr>
+          <tr><td>Rd-03D V2</td><td>256000</td><td>5 V, 200 mA or more</td><td>3.3 V</td><td>No</td><td>Ai-Thinker; up to 3 people, 8 m</td></tr>
+          <tr><td>HLK-LD6004</td><td>115200</td><td class="warn-cell">3.3 V only, supply of 1 A or more</td><td>3.3 V</td><td>No</td><td>60 GHz, 3D positions. Do not power it from 5 V.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note">Connect the adapter's TX to the module's RX and its RX to the module's TX, and share ground. All four use 8 data bits, 1 stop bit, no parity.</p>
+  </details>
+</div>
+
+<script>
+'use strict';
+/*PURE-START*/
+/* ---------- byte helpers ---------- */
+const hex = a => Array.from(a, b=>b.toString(16).padStart(2,'0').toUpperCase()).join(' ');
+const h4 = v => v.toString(16).padStart(4,'0').toUpperCase();
+function parseHex(s){ const c=s.replace(/0x/gi,'').replace(/[^0-9a-f]/gi,''); if(c.length%2) throw new Error('Hex needs an even number of digits'); const o=[]; for(let i=0;i<c.length;i+=2) o.push(parseInt(c.slice(i,i+2),16)); return o; }
+const u16=(b,o)=>b[o]|(b[o+1]<<8);
+const u32=(b,o)=>(b[o]|(b[o+1]<<8)|(b[o+2]<<16)|(b[o+3]<<24))>>>0;
+const le16=v=>[v&255,(v>>8)&255];
+const le32=v=>[v&255,(v>>>8)&255,(v>>>16)&255,(v>>>24)&255];
+const dview=b=>new DataView(b.buffer,b.byteOffset,b.byteLength);
+const f32=(b,o)=>dview(b).getFloat32(o,true);
+const i32=(b,o)=>dview(b).getInt32(o,true);
+const f32b=v=>{const a=new Uint8Array(4); new DataView(a.buffer).setFloat32(0,v,true); return [...a];};
+const concat=parts=>{const n=parts.reduce((s,p)=>s+p.length,0), o=new Uint8Array(n); let i=0; for(const p of parts){o.set(p,i); i+=p.length;} return o;};
+const at4=(b,i,p)=>b[i]===p[0]&&b[i+1]===p[1]&&b[i+2]===p[2]&&b[i+3]===p[3];
+const dB=v=>v>0?10*Math.log10(v):0;
+
+/* ---------- frame shapes ---------- */
+const HL_CMD_H=[0xFD,0xFC,0xFB,0xFA], HL_CMD_T=[0x04,0x03,0x02,0x01];
+const HL_DAT_H=[0xF4,0xF3,0xF2,0xF1], HL_DAT_T=[0xF8,0xF7,0xF6,0xF5];
+function hlShape(kind,H,T){ return {kind, first:H[0], match:(b,i)=>at4(b,i,H), take(b){
+  if(b.length<6) return {need:1};
+  const len=b[4]|(b[5]<<8); if(len>1200) return {bad:1};
+  const tot=10+len; if(b.length<tot) return {need:1};
+  if(!at4(b,6+len,T)) return {bad:1};
+  return {len:tot, payload:b.slice(6,6+len)};
+}}; }
+const SH_FD=hlShape('ack',HL_CMD_H,HL_CMD_T);
+const SH_F4=hlShape('data',HL_DAT_H,HL_DAT_T);
+const SH_RD={kind:'rd', first:0xAA, match:(b,i)=>b[i]===0xAA&&b[i+1]===0xFF&&b[i+2]===0x03&&b[i+3]===0x00, take(b){
+  if(b.length<30) return {need:1};
+  if(b[28]!==0x55||b[29]!==0xCC) return {bad:1};
+  return {len:30, payload:b.slice(4,28)};
+}};
+const xnot=(b,s=0,e=b.length)=>{let r=0; for(let i=s;i<e;i++) r^=b[i]; return (~r)&255;};
+const TF_KNOWN=new Set([0xFFFF,0x3000,0x0F0F,0x0201,0x0202,0x0203,0x0204,0x0205,0x0206,0x0207,0x0A04,0x0A08,0x0A0A,0x0A0B,0x0A0C,0x0A0D,0x0A0E,0x0A0F,0x0A10,0x0A11,0x0A12,0x0A13,0x0A14,0x0A15,0x0A16,0x0A17,0x0A18]);
+const SH_TF={kind:'tf', first:0x01, match:(b,i)=>b[i]===0x01 && i+8<=b.length && xnot(b,i,i+7)===b[i+7] && ((b[i+3]<<8)|b[i+4])<=1024 && TF_KNOWN.has((b[i+5]<<8)|b[i+6]), take(b){
+  const len=(b[3]<<8)|b[4], type=(b[5]<<8)|b[6], id=(b[1]<<8)|b[2];
+  if(len===0) return {len:8, payload:new Uint8Array(0), type, id};
+  const tot=9+len; if(b.length<tot) return {need:1};
+  const p=b.slice(8,8+len); if(xnot(p)!==b[8+len]) return {bad:1};
+  return {len:tot, payload:p, type, id};
+}};
+const SNIFF_SHAPES=[SH_FD,SH_F4,SH_RD,SH_TF];
+
+/* Pull complete frames out of st.buf. Bytes that are not part of any frame go to onBytes (used for text output). */
+function scan(st, shapes, onFrame, onBytes){
+  let b=st.buf;
+  const firsts=new Set(shapes.map(s=>s.first));
+  for(;;){
+    let pos=-1, shape=null;
+    for(let i=0;i<b.length && pos<0;i++) for(const s of shapes){ if(s.match(b,i)){ pos=i; shape=s; break; } }
+    if(pos<0){
+      let cut=b.length;
+      for(let k=Math.max(0,b.length-8);k<b.length;k++) if(firsts.has(b[k])){ cut=k; break; }
+      if(onBytes && cut>0) onBytes(b.slice(0,cut));
+      b=b.slice(cut); break;
+    }
+    if(pos>0){ if(onBytes) onBytes(b.slice(0,pos)); b=b.slice(pos); }
+    const r=shape.take(b);
+    if(r.need) break;
+    if(r.bad){ st.bad=(st.bad||0)+1; if(onBytes) onBytes(b.slice(0,1)); b=b.slice(1); continue; }
+    const frame=b.slice(0,r.len); b=b.slice(r.len);
+    onFrame(shape.kind, r.payload, frame, r);
+  }
+  st.buf=b;
+}
+function textLines(st, bytes, onLine){
+  for(const c of bytes){
+    if(c===10){ const l=(st.text||'').trim(); st.text=''; if(l) onLine(l); }
+    else if(c>=32 && c<127){ st.text=(st.text||'')+String.fromCharCode(c); if(st.text.length>200) st.text=st.text.slice(-200); }
+    else if(c!==13) st.text='';
+  }
+}
+
+/* ---------- builders ---------- */
+function hlBuild(cmd,val=[]){ const len=2+val.length; return new Uint8Array([...HL_CMD_H,len&255,len>>8,cmd&255,cmd>>8,...val,...HL_CMD_T]); }
+function hlData(p){ return new Uint8Array([...HL_DAT_H,p.length&255,p.length>>8,...p,...HL_DAT_T]); }
+function tfBuild(id,type,data=[]){
+  const h=[0x01,(id>>8)&255,id&255,(data.length>>8)&255,data.length&255,(type>>8)&255,type&255];
+  h.push(xnot(h,0,7));
+  return data.length ? new Uint8Array([...h,...data,xnot(data)]) : new Uint8Array(h);
+}
+
+/* ---------- recognisers (listen-first detection) ---------- */
+const isLD2410D1=p=>p.length>=13&&(p[0]===1||p[0]===2)&&p[1]===0xAA&&p[p.length-2]===0x55&&p[p.length-1]===0x00;
+const isLD2410D2=p=>p.length===131&&p[0]<=2;
+const isLD2451=p=>!isLD2410D1(p)&&!isLD2410D2(p)&&(p.length===0||(p[0]<=5&&p.length===2+5*p[0]));
+const isLD2410D2Text=l=>/^(OFF|ON|distance\s*:\s*\d+)$/i.test(l);
+const TF_TYPES=new Set([0xFFFF,0x0A04,0x0A08,0x0A0A,0x0A0B,0x0A0C,0x0A0D,0x0A0E,0x0A0F,0x0A10,0x0A11,0x0A12,0x0A13,0x0A14,0x0A15,0x0A16,0x0A17,0x0A18]);
+
+/* ---------- decoders ---------- */
+function decLD2451(p){
+  if(p.length<2) return {alarm:false, targets:[]};
+  const t=[];
+  for(let k=0;k<p[0] && 2+5*k+5<=p.length;k++){ const o=2+5*k; t.push({angle:p[o]-0x80, dist:p[o+1], approaching:p[o+2]===1, speed:p[o+3], snr:p[o+4]}); }
+  return {alarm:p[1]===1, targets:t};
+}
+function decLD2410D1(p){
+  const s={type:p[0], state:p[2], moveDist:u16(p,3), moveE:p[5], statDist:u16(p,6), statE:p[8], detDist:u16(p,9)};
+  if(p[0]===1 && p.length>=19){
+    const n=(p.length-13-4)/2;
+    if(Number.isInteger(n) && n>0){
+      s.maxMove=p[11]; s.maxStat=p[12];
+      s.moveG=[...p.slice(13,13+n)]; s.statG=[...p.slice(13+n,13+2*n)];
+      s.light=p[13+2*n]; s.out=p[14+2*n];
+    }
+  }
+  return s;
+}
+function decLD2410D2(p){
+  const m=[], u=[];
+  for(let i=0;i<16;i++){ m.push(u32(p,3+4*i)); u.push(u32(p,67+4*i)); }
+  return {result:p[0], dist:u16(p,1), motion:m, micro:u};
+}
+function decLD2410D2Text(l){
+  const m=/distance\s*:\s*(\d+)/i.exec(l);
+  return m ? {present:true, dist:+m[1]} : {present:!/^OFF$/i.test(l), dist:null};
+}
+const signMag=v=>(v&0x8000)?(v&0x7FFF):-(v&0x7FFF);
+function decRd(p){
+  const t=[];
+  for(let i=0;i<3;i++){
+    const o=i*8, rx=u16(p,o), ry=u16(p,o+2), rv=u16(p,o+4), rr=u16(p,o+6);
+    if(!rx&&!ry&&!rv&&!rr) continue;
+    t.push({id:i+1, x:signMag(rx), y:signMag(ry), speed:signMag(rv), res:rr});
+  }
+  return t;
+}
+function decTFTargets(p){
+  if(p.length<4) return [];
+  const n=i32(p,0), t=[];
+  for(let i=0;i<n && 4+20*(i+1)<=p.length;i++){ const o=4+20*i; t.push({x:f32(p,o), y:f32(p,o+4), z:f32(p,o+8), dop:i32(p,o+12), id:i32(p,o+16)}); }
+  return t;
+}
+function fwHiLink(d){
+  if(d.length<8) return hex(d)||'(empty)';
+  const major=u16(d,2), minor=u32(d,4);
+  return `V${major>>8}.${String(major&0xff).padStart(2,'0')}.${minor.toString(16).toUpperCase().padStart(8,'0')}`;
+}
+function fwText(d){
+  if(d.length<2) return hex(d)||'(empty)';
+  const n=Math.min(u16(d,0), d.length-2), s=d.slice(2,2+n);
+  const str=String.fromCharCode(...s);
+  return /^[\x20-\x7e]+$/.test(str) ? str : hex(d);
+}
+
+/* ---------- demo frame generators (real frames, fed through the same parsers) ---------- */
+const DEMO={
+  ld2451(s){
+    s.t=(s.t||0)+1;
+    const c=s.c||(s.c=[{a:-6,d:92,v:54,ap:1},{a:9,d:40,v:31,ap:0}]);
+    c[0].d-=c[0].v/36; if(c[0].d<8){c[0].d=95;c[0].v=40+Math.round(Math.random()*35);c[0].a=-10+Math.round(Math.random()*12);}
+    c[1].d+=c[1].v/36; if(c[1].d>98){c[1].d=12;c[1].a=4+Math.round(Math.random()*10);}
+    const p=[c.length, c.some(x=>x.ap&&x.d<60)?1:0];
+    c.forEach(x=>p.push((x.a+0x80)&255, Math.round(x.d), x.ap, x.v, 60+((s.t*7)%90)));
+    return hlData(p);
+  },
+  ld2410d1(s){
+    s.t=(s.t||0)+1;
+    const d=Math.round(250+150*Math.sin(s.t/25)), g=Math.min(8,Math.floor(d/75)), mv=[], st=[];
+    for(let i=0;i<9;i++){ mv.push(Math.max(0,Math.round(70-Math.abs(i-g)*22+Math.random()*8))); st.push(Math.max(0,Math.round(45-Math.abs(i-g)*15+Math.random()*6))); }
+    return hlData([1,0xAA,3,...le16(d),mv[g],...le16(d-10),st[g],...le16(d),8,8,...mv,...st,0xFF,1,0x55,0x00]);
+  },
+  ld2410d2(s){
+    s.t=(s.t||0)+1;
+    const d=Math.round(300+180*Math.sin(s.t/30)), g=Math.min(15,Math.floor(d/70)), p=[1,...le16(d)];
+    for(let i=0;i<16;i++) p.push(...le32(Math.round(Math.pow(10,(55-Math.abs(i-g)*7+Math.random()*3)/10))));
+    for(let i=0;i<16;i++) p.push(...le32(Math.round(Math.pow(10,(45-Math.abs(i-g)*5+Math.random()*3)/10))));
+    return hlData(p);
+  },
+  rd03d(s){
+    s.t=(s.t||0)+1;
+    const enc=v=>{ v=Math.round(v); return v>=0 ? (v|0x8000) : ((-v)&0x7FFF); };
+    const tg=[[1800*Math.sin(s.t/40), 3000+1500*Math.cos(s.t/55), -60*Math.sin(s.t/55)], [-1200+400*Math.sin(s.t/20), 5200+800*Math.sin(s.t/33), -25]];
+    const p=[0xAA,0xFF,0x03,0x00];
+    tg.forEach(([x,y,v])=>p.push(...le16(enc(x)),...le16(enc(y)),...le16(enc(v)),...le16(330)));
+    p.push(0,0,0,0,0,0,0,0,0x55,0xCC);
+    return new Uint8Array(p);
+  },
+  ld6004(s){
+    s.t=(s.t||0)+1;
+    const tg=[[1.2*Math.sin(s.t/40), 2.2+0.8*Math.cos(s.t/50), 1.1], [-1.0, 3.6+0.5*Math.sin(s.t/30), 0.6]];
+    const d=[...le32(tg.length)];
+    tg.forEach(([x,y,z],i)=>d.push(...f32b(x),...f32b(y),...f32b(z),...le32(i?0:3),...le32(i)));
+    const out=[tfBuild(s.t&0xFFFF,0x0A04,d)];
+    if(s.t%10===0) out.push(tfBuild(s.t&0xFFFF,0x0A0A,[...le32(1),...le32(0),...le32(0),...le32(0)]));
+    return concat(out);
+  }
+};
+/*PURE-END*/
+
+/* ---------- page helpers ---------- */
+const $=s=>document.querySelector(s);
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const cssVar=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const fmtM=m=>String(+m.toFixed(2));
+function niceStep(range){ const raw=range/4, mag=Math.pow(10,Math.floor(Math.log10(raw))); for(const m of [1,2,2.5,5,10]) if(m*mag>=raw) return m*mag; return 10*mag; }
+const grp=(title,inner,note='')=>`<div class="group"><h4>${title}</h4>${inner}${note?`<p class="note">${note}</p>`:''}</div>`;
+const layout=(view,readout,settings)=>`<div class="main"><div class="view">${view}</div><div class="readout">${readout}</div></div><div class="bench">${settings}</div>`;
+
+/* ---------- radar scope (fan view or top-down plan) ---------- */
+class Scope{
+  constructor(cv, onResize){
+    this.cv=cv; this.ctx=cv.getContext('2d'); this.asp=null;
+    if('ResizeObserver' in window) new ResizeObserver(()=>{ this.fit(); onResize&&onResize(); }).observe(cv);
+  }
+  fit(){ const r=this.cv.getBoundingClientRect(), d=window.devicePixelRatio||1; if(r.width<10) return; this.cv.width=Math.round(r.width*d); this.cv.height=Math.round(r.height*d); }
+  draw(cfg, items){
+    const asp=cfg.mode==='plan'?1.2:(cfg.fov>=45?1.75:1.45);
+    if(this.asp!==asp){ this.asp=asp; this.cv.style.aspectRatio=String(asp); this.fit(); }
+    const {cv,ctx}=this, W=cv.width, H=cv.height, d=window.devicePixelRatio||1;
+    if(!W||!H) return;
+    const col={}; const C=n=>col[n]||(col[n]=cssVar(n));
+    const mono=C('--f-mono');
+    ctx.clearRect(0,0,W,H); ctx.lineWidth=d; ctx.strokeStyle=C('--grid'); ctx.fillStyle=C('--muted'); ctx.font=`${11*d}px ${mono}`;
+    let P;
+    if(cfg.mode==='plan'){
+      const pad=30*d, xw=cfg.xmax-cfg.xmin, yh=cfg.ymax-cfg.ymin;
+      const s=Math.min((W-2*pad)/xw,(H-2*pad)/yh), ox=W/2-(cfg.xmin+cfg.xmax)/2*s, oy=H/2+(cfg.ymin+cfg.ymax)/2*s;
+      P=(x,y)=>[ox+x*s, oy-y*s];
+      const step=niceStep(Math.max(xw,yh)/2);
+      ctx.textAlign='center';
+      for(let x=Math.ceil(cfg.xmin/step)*step;x<=cfg.xmax+1e-9;x+=step){ const [px]=P(x,0); ctx.globalAlpha=Math.abs(x)<1e-9?1:.6; ctx.beginPath(); ctx.moveTo(px,P(0,cfg.ymax)[1]); ctx.lineTo(px,P(0,cfg.ymin)[1]); ctx.stroke(); ctx.globalAlpha=1; ctx.fillText(fmtM(x),px,P(0,cfg.ymin)[1]+14*d); }
+      ctx.textAlign='right';
+      for(let y=Math.ceil(cfg.ymin/step)*step;y<=cfg.ymax+1e-9;y+=step){ const [,py]=P(0,y); ctx.globalAlpha=Math.abs(y)<1e-9?1:.6; ctx.beginPath(); ctx.moveTo(P(cfg.xmin,0)[0],py); ctx.lineTo(P(cfg.xmax,0)[0],py); ctx.stroke(); ctx.globalAlpha=1; ctx.fillText(fmtM(y),P(cfg.xmin,0)[0]-6*d,py+4*d); }
+      ctx.textAlign='left'; ctx.fillText('x (m) →',P(cfg.xmax,0)[0]-58*d,P(0,cfg.ymin)[1]+14*d);
+      ctx.fillText('y (m) ↑',P(cfg.xmin,0)[0]+4*d,P(0,cfg.ymax)[1]-8*d);
+      const [sx,sy]=P(0,0); ctx.fillStyle=C('--ink'); ctx.fillRect(sx-5*d,sy-5*d,10*d,10*d);
+    } else {
+      const fov=cfg.fov, range=cfg.range, rad=a=>a*Math.PI/180;
+      const cx=W/2, cy=H-22*d, R=Math.max(20*d, Math.min(H-50*d, (W/2-34*d)/Math.sin(rad(fov))));
+      P=(x,y)=>[cx+x*R/range, cy-y*R/range];
+      ctx.fillStyle=C('--grid'); ctx.globalAlpha=.25; ctx.beginPath(); ctx.moveTo(cx,cy); ctx.arc(cx,cy,R,rad(-90-fov),rad(-90+fov)); ctx.closePath(); ctx.fill(); ctx.globalAlpha=1;
+      ctx.fillStyle=C('--muted'); ctx.textAlign='left';
+      const step=niceStep(range);
+      for(let m=step;m<=range+1e-9;m+=step){ const r=R*m/range; ctx.beginPath(); ctx.arc(cx,cy,r,rad(-90-fov),rad(-90+fov)); ctx.stroke(); ctx.fillText(fmtM(m)+' m', cx+r*Math.sin(rad(fov))+4*d, cy-r*Math.cos(rad(fov))); }
+      const sp=fov>40?30:10, angles=new Set([-fov,fov]);
+      for(let a=-Math.floor(fov/sp)*sp;a<=fov;a+=sp) angles.add(a);
+      ctx.textAlign='center';
+      for(const a of angles){ const x=cx+R*Math.sin(rad(a)), y=cy-R*Math.cos(rad(a)); ctx.beginPath(); ctx.moveTo(cx,cy); ctx.lineTo(x,y); ctx.setLineDash(a===0||Math.abs(a)===fov?[]:[3*d,4*d]); ctx.stroke(); ctx.setLineDash([]); ctx.fillText((a>0?'+':'')+a+'°',x,y-6*d); }
+      ctx.fillStyle=C('--ink'); ctx.beginPath(); ctx.arc(cx,cy,4*d,0,7); ctx.fill();
+    }
+    for(const it of items){
+      const [x,y]=P(it.x,it.y);
+      if(!isFinite(x)||!isFinite(y)||x<0||x>W||y<0||y>H) continue;
+      ctx.fillStyle=C(it.color||'--accent');
+      if(it.small){ ctx.globalAlpha=.55; ctx.beginPath(); ctx.arc(x,y,2.5*d,0,7); ctx.fill(); ctx.globalAlpha=1; continue; }
+      ctx.globalAlpha=.2; ctx.beginPath(); ctx.arc(x,y,15*d,0,7); ctx.fill(); ctx.globalAlpha=1;
+      ctx.beginPath(); ctx.arc(x,y,6*d,0,7); ctx.fill();
+      if(it.label){ const right=x>W*.72; ctx.font=`600 ${12*d}px ${mono}`; ctx.fillStyle=C('--ink'); ctx.textAlign=right?'right':'left'; ctx.fillText(it.label, x+(right?-12:12)*d, y+4*d); }
+    }
+  }
+}
+
+/* ---------- device (one card per connected module) ---------- */
+const devices=new Set();
+let devSeq=0;
+class Device{
+  constructor(kind){
+    this.n=++devSeq; this.kind=kind; this.buf=new Uint8Array(0); this.text=''; this.bad=0;
+    this.frames=0; this.lastFrames=0; this.lastAt=0; this.votes={}; this.waiters=new Map(); this.tfId=1;
+    this.state={}; this.driver=null; this.transport=null; this.dirty=false; this.baud=null;
+    this.el=makeCard(this); $('#devices').prepend(this.el); devices.add(this); updateEmpty(); this.setSub();
+  }
+  q(k){ return this.el.querySelector(`[data-k="${k}"]`); }
+  log(msg, cls='info'){
+    const el=this.q('log'), line=document.createElement('div');
+    line.className=cls; line.textContent=`${new Date().toLocaleTimeString()}  ${msg}`;
+    el.appendChild(line); while(el.childNodes.length>300) el.removeChild(el.firstChild);
+    el.scrollTop=el.scrollHeight;
+  }
+  setStatus(s,text){ this.q('pill').dataset.s=s; this.q('status').textContent=text; }
+  setSub(){ this.q('sub').textContent=[this.kind, this.baud?`${this.baud} baud`:null].filter(Boolean).join(' · '); }
+  countFrame(frame,label='data'){
+    this.frames++; this.lastAt=performance.now(); this.dirty=true;
+    if(this.q('logData').checked) this.log(`RX ${label}  `+(typeof frame==='string'?frame:hex(frame)),'rx');
+  }
+  feed(chunk){
+    const n=new Uint8Array(this.buf.length+chunk.length); n.set(this.buf); n.set(chunk,this.buf.length); this.buf=n;
+    const d=this.driver;
+    if(d) scan(this, d.shapes, (k,p,f,m)=>d.onFrame(this,k,p,f,m), d.text?(b=>textLines(this,b,l=>d.onText(this,l))):null);
+    else scan(this, SNIFF_SHAPES, (k,p,f,m)=>{
+      if(k==='ack'){ this.onAckHL(p,f); return; }
+      for(const dr of DRIVERS) if(dr.sniff && dr.sniff(k,p,m)) this.vote(dr);
+    }, b=>textLines(this,b,l=>{ for(const dr of DRIVERS) if(dr.sniffText && dr.sniffText(l)) this.vote(dr); }));
+  }
+  vote(d){ if(this.driver) return; this.votes[d.id]=(this.votes[d.id]||0)+1; if(this.votes[d.id]>=2) this.identify(d); }
+  waitIdentify(ms){ return new Promise(res=>{ this._idRes=res; this._idT=setTimeout(()=>{ this._idRes=null; res(false); },ms); }); }
+  identify(d, how='Identified as'){
+    if(this.driver) return;
+    this.driver=d; this.bad=0; this.votes={};
+    if(this._idRes){ clearTimeout(this._idT); const r=this._idRes; this._idRes=null; r(true); }
+    this.q('name').textContent=d.name; this.q('what').textContent=d.what+' ·'; this.q('picker').hidden=true;
+    const body=this.q('body'); body.hidden=false; d.setup(this, body); buildRaw(this);
+    this.log(`${how} ${d.name}${d.variant?' ('+d.variant+')':''}.`);
+    this.setStatus('stale','Waiting for data');
+    if(this.transport && d.afterConnect) this.run('Read settings', ()=>d.afterConnect(this));
+  }
+  showPicker(msg){
+    const p=this.q('picker'); p.hidden=false; this.q('pickMsg').textContent=msg;
+    this.q('name').textContent='Unknown module'; this.setStatus('error','Not recognised');
+  }
+  async openSerial(baud){
+    await this.port.open({baudRate:baud});
+    this.baud=baud; this.setSub();
+    const writer=this.port.writable.getWriter();
+    this.keep=true;
+    this.loop=(async()=>{
+      while(this.port.readable && this.keep){
+        this.reader=this.port.readable.getReader();
+        try{ for(;;){ const {value,done}=await this.reader.read(); if(done) break; if(value) this.feed(value); } }
+        catch(e){ if(this.keep) this.log('Serial read error: '+e.message,'err'); }
+        finally{ this.reader.releaseLock(); }
+      }
+    })();
+    this.transport={write:b=>writer.write(b), close:async()=>{
+      this.keep=false; try{ await this.reader?.cancel(); }catch{}
+      await this.loop; try{ writer.releaseLock(); }catch{} await this.port.close();
+    }};
+  }
+  async closeTransport(){ const t=this.transport; this.transport=null; if(t) await t.close(); }
+  lost(){
+    this.transport=null; clearInterval(this.demoTimer);
+    this.setStatus('error','Connection lost'); this.q('close').textContent='Remove'; this.log('Connection lost.','err');
+    refreshButtons(this);
+  }
+  async remove(){
+    clearInterval(this.demoTimer);
+    try{ await this.closeTransport(); }catch(e){}
+    devices.delete(this); this.el.remove(); updateEmpty();
+  }
+  /* Hi-Link style commands (FD FC FB FA … 04 03 02 01) */
+  async sendHL(cmd, val=[], timeout=1500){
+    if(!this.transport) throw new Error('Settings need a connected module (not demo data).');
+    const f=hlBuild(cmd,val);
+    const p=new Promise((res,rej)=>{ const t=setTimeout(()=>{ this.waiters.delete(cmd); rej(new Error(`No reply to command 0x${h4(cmd)}`)); },timeout); this.waiters.set(cmd,{res,t}); });
+    this.log('TX  '+hex(f),'tx'); await this.transport.write(f);
+    const r=await p;
+    if(r.status!==0) throw new Error(`Module rejected command 0x${h4(cmd)} (status ${r.status})`);
+    return r;
+  }
+  onAckHL(p, frame){
+    this.log('RX  '+hex(frame),'rx');
+    if(p.length<4) return;
+    const cmd=u16(p,0)&0xFEFF, w=this.waiters.get(cmd);
+    if(w){ this.waiters.delete(cmd); clearTimeout(w.t); w.res({status:u16(p,2), data:p.slice(4)}); }
+  }
+  async withConfig(fn){
+    await this.sendHL(0x00FF,[0x01,0x00]);
+    try{ return await fn(); } finally { try{ await this.sendHL(0x00FE); }catch(e){ this.log(e.message,'err'); } }
+  }
+  /* LD6004 TinyFrame commands: the module echoes the same TYPE to acknowledge */
+  async sendTF(type, data=[], timeout=1200){
+    if(!this.transport) throw new Error('Settings need a connected module (not demo data).');
+    for(let attempt=1;;attempt++){
+      const f=tfBuild(this.tfId++&0xFFFF,type,data), key='tf'+type;
+      const p=new Promise((res,rej)=>{ const t=setTimeout(()=>{ this.waiters.delete(key); rej(new Error(`No reply to message type 0x${h4(type)}`)); },timeout); this.waiters.set(key,{res,t}); });
+      this.log('TX  '+hex(f),'tx'); await this.transport.write(f);
+      try{ return await p; }catch(e){ if(attempt>=3) throw e; this.log('No reply, sending again (the module may have been asleep).','info'); }
+    }
+  }
+  onTF(type, payload){
+    const key='tf'+type, w=this.waiters.get(key);
+    if(w){ this.waiters.delete(key); clearTimeout(w.t); w.res(payload); }
+  }
+  async run(label, fn){ try{ await fn(); }catch(e){ this.log(`${label}: ${e.message}`,'err'); } }
+  on(k, label, fn){ const el=this.q(k); if(el) el.addEventListener('click',()=>this.run(label,fn)); }
+  num(k, lo, hi, name, integer=true){
+    const v=Number(String(this.q(k).value).trim());
+    if(!isFinite(v)||v<lo||v>hi||(integer&&!Number.isInteger(v))) throw new Error(`${name} must be ${integer?'a whole number':'a number'} from ${lo} to ${hi}`);
+    return v;
+  }
+}
+
+function makeCard(dev){
+  const el=document.createElement('section'); el.className='panel card';
+  el.innerHTML=`
+  <div class="card-head">
+    <div><h3 class="dev-name" data-k="name">Identifying module…</h3><div class="dev-sub"><span data-k="what"></span> <span data-k="sub"></span></div></div>
+    <div class="row" style="align-items:center"><span class="status" data-k="pill" data-s="stale"><span class="dot"></span><span data-k="status">Connecting…</span></span><span class="rate" data-k="rate"></span><button data-k="close">Disconnect</button></div>
+  </div>
+  <div class="picker" data-k="picker" hidden>
+    <p data-k="pickMsg"></p>
+    <div class="row"><label style="width:260px">Model<select data-k="pickModel">${DRIVERS.map(d=>`<option value="${d.id}">${esc(d.label)}</option>`).join('')}</select></label><button class="primary" data-k="pickGo">Use this model</button></div>
+  </div>
+  <div data-k="body" hidden></div>
+  <details class="logbox">
+    <summary>Byte log and raw commands</summary>
+    <div class="row between" style="margin-top:8px"><label class="inline"><input type="checkbox" data-k="logData"> Show data frames</label><button data-k="clear">Clear log</button></div>
+    <div class="log" data-k="log" role="log"></div>
+    <div data-k="raw"></div>
+  </details>`;
+  el.querySelector('[data-k="close"]').onclick=()=>dev.remove();
+  el.querySelector('[data-k="clear"]').onclick=()=>{ dev.q('log').innerHTML=''; };
+  el.querySelector('[data-k="pickGo"]').onclick=()=>dev.run('Connect', async()=>{
+    const d=DRIVER_BY_ID[dev.q('pickModel').value];
+    if(dev.port && !dev.transport){ await dev.openSerial(d.baud); }
+    dev.identify(d,'Connected as');
+  });
+  return el;
+}
+function buildRaw(dev){
+  const r=dev.q('raw');
+  if(dev.driver.family==='tf'){
+    r.innerHTML=`<div class="row"><label class="w90">Type (hex)<input type="text" data-k="rawType" value="FFFF" class="mono"></label><label class="grow">Data bytes (hex)<input type="text" data-k="rawData" placeholder="e.g. 0D 00 00 00" class="mono"></label><button data-k="rawSend">Send</button></div>`;
+    dev.on('rawSend','Raw message', async()=>{
+      const t=parseHex(dev.q('rawType').value); if(t.length!==2) throw new Error('Type must be 2 bytes, e.g. 0201');
+      await dev.sendTF((t[0]<<8)|t[1], parseHex(dev.q('rawData').value)); dev.log('Acknowledged.');
+    });
+  } else {
+    r.innerHTML=`<div class="row"><label class="w90">Command word<input type="text" data-k="rawCmd" value="00A0" class="mono"></label><label class="grow">Value bytes (hex)<input type="text" data-k="rawVal" placeholder="e.g. 01 00" class="mono"></label><label class="inline"><input type="checkbox" data-k="rawCfg" checked> Wrap in config mode</label><button data-k="rawSend">Send</button></div>`;
+    dev.on('rawSend','Raw command', async()=>{
+      const cw=parseHex(dev.q('rawCmd').value); if(cw.length!==2) throw new Error('Command word must be 2 bytes, e.g. 00A0');
+      const cmd=(cw[0]<<8)|cw[1], val=parseHex(dev.q('rawVal').value);
+      const go=async()=>{ const x=await dev.sendHL(cmd,val); dev.log(`Reply data: ${hex(x.data)||'(none)'}`); };
+      dev.q('rawCfg').checked ? await dev.withConfig(go) : await go();
+    });
+  }
+}
+function refreshButtons(dev){ dev.el.querySelectorAll('[data-needs]').forEach(b=>b.disabled=!dev.transport); }
+
+/* ---------- shared presence view (LD2410D, both protocols) ---------- */
+const presenceView=()=>`<div class="presence">
+  <div class="pstate" data-k="pstate">Waiting for data</div>
+  <div class="big"><span class="n" data-k="pdist">—</span><span class="u">m</span></div>
+  <div><div class="distbar"><div class="distfill" data-k="pbar"></div></div><div class="distscale"><span>0 m</span><span>5 m</span><span>10 m</span></div></div>
+  <h4 style="margin-top:6px">Energy by distance gate</h4>
+  <div class="legend"><span><span class="sw m"></span>Moving</span><span><span class="sw s"></span><span data-k="stillName">Still</span></span><span><span class="sw t"></span>Threshold</span></div>
+  <div class="gates" data-k="gates"></div>
+  <p class="note" data-k="gatenote"></p>
+</div>`;
+function renderPresence(dev, {present, label, distCm}){
+  const ps=dev.q('pstate'); ps.textContent=label; ps.classList.toggle('on',!!present);
+  dev.q('pdist').textContent=present&&distCm!=null?(distCm/100).toFixed(2):'—';
+  dev.q('pbar').style.width=present&&distCm!=null?Math.min(100,distCm/10)+'%':'0';
+}
+function renderGates(dev, labels, titles, mv, st, tm, ts){
+  const g=dev.q('gates');
+  if(!mv){ g.innerHTML=''; return; }
+  const pct=v=>Math.max(0,Math.min(100,v));
+  g.innerHTML=labels.map((l,i)=>`<div class="gate" title="${esc(titles[i])}"><div class="bars">
+    <div class="bar" style="height:${pct(mv[i])}%"></div><div class="bar s" style="height:${pct(st[i])}%"></div>
+    ${tm&&tm[i]!=null?`<div class="tick" style="bottom:${pct(tm[i])}%"></div>`:''}${ts&&ts[i]!=null?`<div class="tick s" style="bottom:${pct(ts[i])}%"></div>`:''}
+  </div><span>${l}</span></div>`).join('');
+}
+
+/* =====================================================================
+   DRIVER: HLK-LD2451 (vehicles)
+   ===================================================================== */
+const DIRS=['moving away only','approaching only','both directions'];
+function l51ShowDet(dev,d){
+  if(d.length<4) return dev.log('Detection reply too short: '+hex(d),'err');
+  dev.q('maxDist').value=Math.min(100,Math.max(10,d[0])); dev.q('maxDistVal').textContent=d[0];
+  if(d[1]<=2) dev.q('dirMode').value=String(d[1]);
+  dev.q('minSpeed').value=d[2]; dev.q('noTargetDelay').value=d[3];
+  dev.log(`Detection: max distance ${d[0]} m, ${DIRS[d[1]]||'direction '+d[1]}, min speed ${d[2]} km/h, no-target delay ${d[3]} s`);
+}
+function l51ShowSens(dev,d){
+  if(d.length<2) return dev.log('Sensitivity reply too short: '+hex(d),'err');
+  const tc=Math.min(10,Math.max(1,d[0]));
+  dev.q('trigCount').value=tc; dev.q('trigVal').textContent=tc;
+  dev.q('snrLevel').value=(d[1]>=3&&d[1]<=8)?String(d[1]):'0';
+  dev.log(`Sensitivity: trigger count ${d[0]}, SNR threshold ${d[1]===0?'default (4)':d[1]}`);
+}
+const LD2451={
+  id:'ld2451', name:'HLK-LD2451', label:'HLK-LD2451 (vehicles)', what:'24 GHz vehicle radar', baud:115200, family:'hl',
+  shapes:[SH_FD,SH_F4],
+  sniff:(k,p)=>k==='data'&&isLD2451(p),
+  setup(dev,body){
+    body.innerHTML=layout(
+      `<canvas data-k="scope" aria-label="Radar view of detected vehicles"></canvas>
+       <label>Display range: <span data-k="rangeVal">100</span> m<input type="range" data-k="range" min="20" max="100" step="10" value="100"></label>`,
+      `<div><h4>Lead vehicle</h4><div class="big"><span class="n" data-k="leadSpeed">—</span><span class="u">km/h</span></div><div class="meta" data-k="leadMeta">Waiting for data</div></div>
+       <div><span class="alarm" data-k="alarm">No approach alarm</span></div>
+       <div><h4>Vehicles (max 5)</h4><div data-k="targets"><p class="empty">No vehicles detected.</p></div></div>`,
+      grp('Detection',`
+        <label>Maximum distance: <span data-k="maxDistVal">100</span> m<input type="range" data-k="maxDist" min="10" max="100" step="1" value="100"></label>
+        <div class="row">
+          <label class="grow">Direction<select data-k="dirMode"><option value="1">Approaching only</option><option value="0">Moving away only</option><option value="2">Both directions</option></select></label>
+          <label class="w90">Min speed (km/h)<input type="text" data-k="minSpeed" value="5" inputmode="numeric" class="mono"></label>
+          <label class="w90">No-target delay (s)<input type="text" data-k="noTargetDelay" value="2" inputmode="numeric" class="mono"></label>
+        </div>
+        <div class="row"><button data-needs data-k="detRead">Read from module</button><button data-needs class="primary" data-k="detApply">Apply</button></div>`,
+        'Vehicles beyond the maximum distance, slower than the minimum speed, or moving the wrong way are ignored.')+
+      grp('Sensitivity',`
+        <div class="row">
+          <label class="grow">Trigger count: <span data-k="trigVal">1</span><input type="range" data-k="trigCount" min="1" max="10" step="1" value="1"></label>
+          <label class="w120">SNR threshold<select data-k="snrLevel"><option value="0">Default (4)</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option><option>8</option></select></label>
+        </div>
+        <div class="row"><button data-needs data-k="sensRead">Read from module</button><button data-needs class="primary" data-k="sensApply">Apply</button></div>`,
+        'Trigger count is how many consecutive detections are needed before a vehicle is reported; 1 is fastest. A higher SNR threshold is less sensitive.')+
+      grp('Module',`
+        <div class="row"><button data-needs data-k="fw">Read firmware</button><button data-needs data-k="restart">Restart</button></div>
+        <div class="row"><button data-needs data-k="btOff">Turn Bluetooth off</button><button data-needs data-k="btOn">Turn Bluetooth on</button></div>`,
+        'Bluetooth changes take effect after a restart.'));
+    dev.scope=new Scope(dev.q('scope'),()=>dev.dirty=true);
+    dev.q('range').oninput=()=>{ dev.q('rangeVal').textContent=dev.q('range').value; dev.dirty=true; };
+    dev.q('maxDist').oninput=()=>{ dev.q('maxDistVal').textContent=dev.q('maxDist').value; };
+    dev.q('trigCount').oninput=()=>{ dev.q('trigVal').textContent=dev.q('trigCount').value; };
+    dev.on('detRead','Read detection',()=>dev.withConfig(async()=>l51ShowDet(dev,(await dev.sendHL(0x0012)).data)));
+    dev.on('detApply','Set detection',async()=>{
+      const dist=+dev.q('maxDist').value, dir=+dev.q('dirMode').value;
+      const spd=dev.num('minSpeed',0,120,'Min speed'), dly=dev.num('noTargetDelay',0,255,'No-target delay');
+      await dev.withConfig(()=>dev.sendHL(0x0002,[dist,dir,spd,dly]));
+      dev.log(`Detection saved: max distance ${dist} m, ${DIRS[dir]}, min speed ${spd} km/h, no-target delay ${dly} s`);
+    });
+    dev.on('sensRead','Read sensitivity',()=>dev.withConfig(async()=>l51ShowSens(dev,(await dev.sendHL(0x0013)).data)));
+    dev.on('sensApply','Set sensitivity',async()=>{
+      const tc=+dev.q('trigCount').value, snr=+dev.q('snrLevel').value;
+      await dev.withConfig(()=>dev.sendHL(0x0003,[tc,snr,0,0]));
+      dev.log(`Sensitivity saved: trigger count ${tc}, SNR threshold ${snr||'default (4)'}`);
+    });
+    dev.on('fw','Read firmware',()=>dev.withConfig(async()=>dev.log('Firmware '+fwHiLink((await dev.sendHL(0x00A0)).data))));
+    dev.on('restart','Restart',async()=>{ await dev.sendHL(0x00FF,[1,0]); await dev.sendHL(0x00A3).catch(e=>dev.log(e.message,'err')); dev.log('Restart sent.'); });
+    dev.on('btOff','Bluetooth off',async()=>{ await dev.withConfig(()=>dev.sendHL(0x00A4,[0,0])); dev.log('Bluetooth set to off. Restart to apply.'); });
+    dev.on('btOn','Bluetooth on',async()=>{ await dev.withConfig(()=>dev.sendHL(0x00A4,[1,0])); dev.log('Bluetooth set to on. Restart to apply.'); });
+    refreshButtons(dev);
+  },
+  afterConnect:dev=>dev.withConfig(async()=>{
+    try{ l51ShowDet(dev,(await dev.sendHL(0x0012)).data); }catch(e){ dev.log(e.message,'err'); }
+    try{ l51ShowSens(dev,(await dev.sendHL(0x0013)).data); }catch(e){ dev.log(e.message,'err'); }
+  }),
+  onFrame(dev,k,p,frame){
+    if(k==='ack') return dev.onAckHL(p,frame);
+    dev.countFrame(frame); Object.assign(dev.state, decLD2451(p));
+  },
+  render(dev){
+    const t=dev.state.targets||[], range=+dev.q('range').value, rad=a=>a*Math.PI/180;
+    dev.scope.draw({mode:'fan',fov:25,range}, t.map(v=>({x:v.dist*Math.sin(rad(v.angle)), y:v.dist*Math.cos(rad(v.angle)), color:v.approaching?'--approach':'--recede', label:`${v.speed} km/h ${v.approaching?'▼':'▲'}`})));
+    const lead=[...t].sort((a,b)=>(b.approaching-a.approaching)||(a.approaching?a.dist-b.dist:b.speed-a.speed))[0];
+    dev.q('leadSpeed').textContent=lead?lead.speed:'—';
+    dev.q('leadMeta').innerHTML=lead?`<span class="${lead.approaching?'dir-a':'dir-r'}">${lead.approaching?'Approaching':'Moving away'}</span><span>${lead.dist} m</span><span>${lead.angle>0?'+':''}${lead.angle}°</span>`:'No vehicles detected';
+    const al=dev.q('alarm'); al.classList.toggle('on',!!dev.state.alarm); al.textContent=dev.state.alarm?'Approach alarm':'No approach alarm';
+    dev.q('targets').innerHTML=t.length?`<div class="tablewrap"><table><thead><tr><th>#</th><th>Speed</th><th>Distance</th><th>Angle</th><th>Direction</th><th>SNR</th></tr></thead><tbody>${
+      t.map((v,i)=>`<tr><td>${i+1}</td><td>${v.speed} km/h</td><td>${v.dist} m</td><td>${v.angle>0?'+':''}${v.angle}°</td><td class="${v.approaching?'dir-a':'dir-r'}">${v.approaching?'Approach':'Away'}</td><td>${v.snr}</td></tr>`).join('')}</tbody></table></div>`:'<p class="empty">No vehicles detected.</p>';
+  },
+  demo:DEMO.ld2451
+};
+
+/* =====================================================================
+   DRIVER: HLK-LD2410D, protocol V1 (serial protocol document V1.01)
+   ===================================================================== */
+const D1_STATES=['No one present','Someone moving','Someone still','Moving and still'];
+function d1ShowParams(dev,d){
+  if(d.length<6 || d[0]!==0xAA) return dev.log('Parameter reply not recognised: '+hex(d),'err');
+  const N=d[1];
+  dev.q('maxMove').value=String(d[2]); dev.q('maxStill').value=String(d[3]);
+  const sm=[...d.slice(4,5+N)], ss=[...d.slice(5+N,6+2*N)], dur=u16(d,6+2*N);
+  dev.q('timeout').value=dur;
+  dev.state.sensM=sm; dev.state.sensS=ss;
+  sm.forEach((v,i)=>{ const a=dev.q('gm'+i), b=dev.q('gs'+i); if(a) a.value=v; if(b) b.value=ss[i]; });
+  dev.dirty=true;
+  dev.log(`Parameters: max moving gate ${d[2]}, max still gate ${d[3]}, no-one timeout ${dur} s, ${N+1} gates`);
+}
+const LD2410D1={
+  id:'ld2410d1', name:'HLK-LD2410D', variant:'protocol V1', label:'HLK-LD2410D, protocol V1 (older firmware)', what:'24 GHz human presence · protocol V1', baud:115200, family:'hl',
+  shapes:[SH_FD,SH_F4],
+  sniff:(k,p)=>k==='data'&&isLD2410D1(p),
+  setup(dev,body){
+    const rows=[...Array(9).keys()].map(i=>`<tr><td>Gate ${i}</td><td><input type="text" data-k="gm${i}" class="mono" inputmode="numeric"></td><td><input type="text" data-k="gs${i}" class="mono" inputmode="numeric"></td></tr>`).join('');
+    body.innerHTML=layout(presenceView(),
+      `<div><h4>Detail</h4><dl class="stats">
+         <dt>Moving target</dt><dd data-k="dMove">—</dd><dt>Still target</dt><dd data-k="dStill">—</dd>
+         <dt>Detection distance</dt><dd data-k="dDet">—</dd><dt>OUT pin</dt><dd data-k="dOut">—</dd><dt>Light sensor</dt><dd data-k="dLight">—</dd>
+       </dl></div>`,
+      grp('Range and timeout',`
+        <div class="row">
+          <label class="w90">Max moving gate<select data-k="maxMove">${[2,3,4,5,6,7,8].map(v=>`<option${v===8?' selected':''}>${v}</option>`).join('')}</select></label>
+          <label class="w90">Max still gate<select data-k="maxStill">${[2,3,4,5,6,7,8].map(v=>`<option${v===8?' selected':''}>${v}</option>`).join('')}</select></label>
+          <label class="w120">No-one timeout (s)<input type="text" data-k="timeout" value="5" inputmode="numeric" class="mono"></label>
+        </div>
+        <div class="row"><button data-needs data-k="pRead">Read from module</button><button data-needs class="primary" data-k="pApply">Apply</button></div>`,
+        'Gates beyond the maximum are ignored. The timeout is how long the module waits after the last detection before reporting that no one is present.')+
+      grp('Gate sensitivity',`
+        <div class="scroll"><table><thead><tr><th>Gate</th><th>Moving</th><th>Still</th></tr></thead><tbody>${rows}</tbody></table></div>
+        <div class="row"><button data-needs data-k="sRead">Read from module</button><button data-needs class="primary" data-k="sApply">Apply all gates</button></div>`,
+        'Values 0–100. Energy must rise above a gate\'s value to count as a detection, so lower numbers are more sensitive.')+
+      grp('Module',`
+        <div class="row"><button data-needs data-k="engOn">Engineering mode on</button><button data-needs data-k="engOff">Engineering mode off</button></div>
+        <div class="row"><button data-needs data-k="fw">Read firmware</button></div>`,
+        'Engineering mode adds energy for each gate to the data. It switches off again when the module loses power.'));
+    dev.q('gatenote').textContent='Turn on engineering mode under Module to see energy for each gate.';
+    const readParams=()=>dev.withConfig(async()=>d1ShowParams(dev,(await dev.sendHL(0x0061)).data));
+    dev.on('pRead','Read parameters',readParams); dev.on('sRead','Read parameters',readParams);
+    dev.on('pApply','Set range and timeout',async()=>{
+      const mm=+dev.q('maxMove').value, ms=+dev.q('maxStill').value, t=dev.num('timeout',0,65535,'No-one timeout');
+      await dev.withConfig(()=>dev.sendHL(0x0060,[...le16(0),...le32(mm),...le16(1),...le32(ms),...le16(2),...le32(t)]));
+      dev.log(`Saved: max moving gate ${mm}, max still gate ${ms}, timeout ${t} s`);
+    });
+    dev.on('sApply','Set gate sensitivity',async()=>{
+      const vals=[...Array(9).keys()].map(i=>[dev.num('gm'+i,0,100,`Gate ${i} moving`), dev.num('gs'+i,0,100,`Gate ${i} still`)]);
+      await dev.withConfig(async()=>{ for(let i=0;i<9;i++) await dev.sendHL(0x0064,[...le16(0),...le32(i),...le16(1),...le32(vals[i][0]),...le16(2),...le32(vals[i][1])]); });
+      dev.state.sensM=vals.map(v=>v[0]); dev.state.sensS=vals.map(v=>v[1]); dev.dirty=true;
+      dev.log('Gate sensitivities saved.');
+    });
+    dev.on('engOn','Engineering mode',async()=>{ await dev.withConfig(()=>dev.sendHL(0x0062)); dev.log('Engineering mode on.'); });
+    dev.on('engOff','Engineering mode',async()=>{ await dev.withConfig(()=>dev.sendHL(0x0063)); dev.log('Engineering mode off.'); });
+    dev.on('fw','Read firmware',()=>dev.withConfig(async()=>dev.log('Firmware '+fwHiLink((await dev.sendHL(0x00A0)).data))));
+    refreshButtons(dev);
+  },
+  afterConnect:dev=>dev.withConfig(async()=>d1ShowParams(dev,(await dev.sendHL(0x0061)).data)),
+  onFrame(dev,k,p,frame){
+    if(k==='ack') return dev.onAckHL(p,frame);
+    if(!isLD2410D1(p)) return;
+    dev.countFrame(frame);
+    const s=decLD2410D1(p);
+    if(!s.moveG){ delete dev.state.moveG; delete dev.state.statG; }
+    Object.assign(dev.state, s);
+  },
+  render(dev){
+    const s=dev.state;
+    renderPresence(dev,{present:s.state>0, label:D1_STATES[s.state]||`State ${s.state}`, distCm:s.detDist});
+    dev.q('dMove').textContent=s.state&1?`${(s.moveDist/100).toFixed(2)} m · energy ${s.moveE}`:'—';
+    dev.q('dStill').textContent=s.state&2?`${(s.statDist/100).toFixed(2)} m · energy ${s.statE}`:'—';
+    dev.q('dDet').textContent=s.detDist!=null?`${(s.detDist/100).toFixed(2)} m`:'—';
+    dev.q('dOut').textContent=s.out==null?'—':(s.out?'Someone present':'No one');
+    dev.q('dLight').textContent=s.light==null?'—':s.light;
+    if(s.moveG){
+      const n=s.moveG.length;
+      renderGates(dev,[...Array(n).keys()].map(String),[...Array(n).keys()].map(i=>`Gate ${i}`),s.moveG,s.statG,s.sensM,s.sensS);
+      dev.q('gatenote').textContent=`Max moving gate ${s.maxMove}, max still gate ${s.maxStat}. Ticks show each gate's sensitivity setting once read from the module.`;
+    } else renderGates(dev,[],[],null);
+  },
+  demo:DEMO.ld2410d1
+};
+
+/* =====================================================================
+   DRIVER: HLK-LD2410D, protocol V2 (user manual V1.02, newer firmware)
+   ===================================================================== */
+const D2_STATES=['No one present','Someone present','Someone present (still)'];
+async function d2ReadParams(dev, ids){
+  const out=[];
+  for(let i=0;i<ids.length;i+=4){
+    const chunk=ids.slice(i,i+4), r=await dev.sendHL(0x0008, chunk.flatMap(le16));
+    for(let j=0;j<chunk.length;j++) out.push(r.data.length>=4*(j+1)?u32(r.data,4*j):null);
+  }
+  return out;
+}
+async function d2WriteParams(dev, pairs){
+  for(let i=0;i<pairs.length;i+=4) await dev.sendHL(0x0007, pairs.slice(i,i+4).flatMap(([id,v])=>[...le16(id),...le32(v)]));
+  await dev.sendHL(0x00FD);
+}
+const D2_TH_IDS=[...Array(16).keys()].map(i=>0x10+i), D2_MM_IDS=[...Array(16).keys()].map(i=>0x30+i);
+const LD2410D2={
+  id:'ld2410d2', name:'HLK-LD2410D', variant:'protocol V2', label:'HLK-LD2410D, protocol V2 (newer firmware)', what:'24 GHz human presence · protocol V2', baud:115200, family:'hl',
+  shapes:[SH_FD,SH_F4], text:true,
+  sniff:(k,p)=>k==='data'&&isLD2410D2(p),
+  sniffText:isLD2410D2Text,
+  setup(dev,body){
+    const rows=[...Array(16).keys()].map(i=>`<tr><td>${i}</td><td>${(i*0.7).toFixed(1)} m</td><td><input type="text" data-k="th${i}" class="mono" inputmode="decimal"></td><td><input type="text" data-k="mm${i}" class="mono" inputmode="decimal"></td></tr>`).join('');
+    body.innerHTML=layout(presenceView(),
+      `<div><h4>Detail</h4><dl class="stats">
+         <dt>Output mode</dt><dd data-k="dMode">—</dd><dt>Last report</dt><dd data-k="dRaw">—</dd><dt>Firmware</dt><dd data-k="dFw">—</dd>
+       </dl></div>`,
+      grp('Detection',`
+        <label>Maximum distance: <span data-k="maxDistVal">10.0</span> m<input type="range" data-k="maxDist" min="0.7" max="10" step="0.1" value="10"></label>
+        <label class="w120">Disappearance delay (s)<input type="text" data-k="delay" value="5" inputmode="numeric" class="mono"></label>
+        <div class="row"><button data-needs data-k="pRead">Read from module</button><button data-needs class="primary" data-k="pApply">Apply and save</button></div>`,
+        'The delay is how long the module waits after the last detection before reporting that no one is present.')+
+      grp('Output',`
+        <div class="row"><label class="grow">Data output<select data-k="outMode"><option value="100">Normal (text: OFF or distance)</option><option value="4">Engineering (energy for each gate)</option></select></label><button data-needs class="primary" data-k="oApply">Apply</button></div>`,
+        'Engineering mode is needed for the gate energy chart.')+
+      grp('Gate thresholds',`
+        <div class="scroll"><table><thead><tr><th>Gate</th><th>From</th><th>Trigger</th><th>Micro</th></tr></thead><tbody>${rows}</tbody></table></div>
+        <div class="row"><button data-needs data-k="tRead">Read from module</button><button data-needs class="primary" data-k="tApply">Apply and save</button></div>`,
+        'In the same 0–95 scale as Hi-Link\'s PC tool (decibels of radar energy). Lower values are more sensitive. Each gate is 0.7 m.')+
+      grp('Auto-calibrate',`
+        <div class="row">
+          <label class="w90">Trigger factor<input type="text" data-k="cTrig" value="3.0" inputmode="decimal" class="mono"></label>
+          <label class="w90">Hold factor<input type="text" data-k="cHold" value="2.0" inputmode="decimal" class="mono"></label>
+          <label class="w90">Micro factor<input type="text" data-k="cMicro" value="3.0" inputmode="decimal" class="mono"></label>
+        </div>
+        <div class="row"><button data-needs class="primary" data-k="cStart">Start calibration</button><span class="rate" data-k="cProg"></span></div>`,
+        'Leave the room empty while it runs. The module measures the background and sets new thresholds. Factors range from 1.0 to 20.0.')+
+      grp('Module',`<div class="row"><button data-needs data-k="fw">Read firmware</button></div>`));
+    dev.q('stillName').textContent='Micro-motion';
+    dev.q('maxDist').oninput=()=>{ dev.q('maxDistVal').textContent=(+dev.q('maxDist').value).toFixed(1); };
+    const readDet=async()=>{ const [m,d]=await d2ReadParams(dev,[0x0001,0x0004]); if(m!=null){ dev.q('maxDist').value=m/10; dev.q('maxDistVal').textContent=(m/10).toFixed(1); } if(d!=null) dev.q('delay').value=d; dev.log(`Detection: max distance ${m/10} m, disappearance delay ${d} s`); };
+    const readTh=async()=>{
+      const th=await d2ReadParams(dev,D2_TH_IDS), mm=await d2ReadParams(dev,D2_MM_IDS);
+      dev.state.thT=th.map(v=>v==null?null:dB(v)); dev.state.thM=mm.map(v=>v==null?null:dB(v));
+      for(let i=0;i<16;i++){ if(th[i]!=null) dev.q('th'+i).value=dB(th[i]).toFixed(1); if(mm[i]!=null) dev.q('mm'+i).value=dB(mm[i]).toFixed(1); }
+      dev.dirty=true; dev.log('Gate thresholds read.');
+    };
+    dev.on('pRead','Read detection',()=>dev.withConfig(readDet));
+    dev.on('pApply','Set detection',async()=>{
+      const m=Math.round(+dev.q('maxDist').value*10), d=dev.num('delay',0,65535,'Disappearance delay');
+      await dev.withConfig(()=>d2WriteParams(dev,[[0x0001,m],[0x0004,d]]));
+      dev.log(`Saved: max distance ${m/10} m, disappearance delay ${d} s`);
+    });
+    dev.on('oApply','Set output mode',async()=>{
+      const v=+dev.q('outMode').value;
+      await dev.withConfig(()=>dev.sendHL(0x0012,[...le16(0),...le32(v)]));
+      dev.state.mode=v===4?'Engineering':'Normal'; dev.dirty=true; dev.log(`Output mode set to ${dev.state.mode.toLowerCase()}.`);
+    });
+    dev.on('tRead','Read thresholds',()=>dev.withConfig(readTh));
+    dev.on('tApply','Set thresholds',async()=>{
+      const pairs=[];
+      for(let i=0;i<16;i++){
+        const t=dev.num('th'+i,0,95,`Gate ${i} trigger`,false), m=dev.num('mm'+i,0,95,`Gate ${i} micro-motion`,false);
+        pairs.push([D2_TH_IDS[i],Math.round(Math.pow(10,t/10))],[D2_MM_IDS[i],Math.round(Math.pow(10,m/10))]);
+      }
+      await dev.withConfig(()=>d2WriteParams(dev,pairs));
+      dev.state.thT=[...Array(16).keys()].map(i=>+dev.q('th'+i).value); dev.state.thM=[...Array(16).keys()].map(i=>+dev.q('mm'+i).value); dev.dirty=true;
+      dev.log('Gate thresholds saved.');
+    });
+    dev.on('cStart','Auto-calibrate',async()=>{
+      const f=k=>Math.round(dev.num(k,1,20,'Each factor',false)*10);
+      const val=[...le16(f('cTrig')),...le16(f('cHold')),...le16(f('cMicro'))];
+      await dev.withConfig(async()=>{
+        await dev.sendHL(0x0009,val);
+        dev.log('Calibration started. Keep the room empty.');
+        for(let i=0;i<180;i++){
+          await sleep(1000);
+          const r=await dev.sendHL(0x000A); const pct=r.data.length>=2?u16(r.data,0):0;
+          dev.q('cProg').textContent=`${pct}%`;
+          if(pct>=100) break;
+        }
+      });
+      dev.log('Calibration finished. Read the thresholds to see the new values.');
+    });
+    dev.on('fw','Read firmware',()=>dev.withConfig(async()=>{ const v=fwText((await dev.sendHL(0x0000)).data); dev.state.fw=v; dev.dirty=true; dev.log('Firmware '+v); }));
+    refreshButtons(dev);
+  },
+  afterConnect:dev=>dev.withConfig(async()=>{
+    try{ const v=fwText((await dev.sendHL(0x0000)).data); dev.state.fw=v; dev.log('Firmware '+v); }catch(e){ dev.log(e.message,'err'); }
+    try{ const [m,d]=await d2ReadParams(dev,[0x0001,0x0004]); if(m!=null){ dev.q('maxDist').value=m/10; dev.q('maxDistVal').textContent=(m/10).toFixed(1);} if(d!=null) dev.q('delay').value=d; }catch(e){ dev.log(e.message,'err'); }
+    dev.dirty=true;
+  }),
+  onFrame(dev,k,p,frame){
+    if(k==='ack') return dev.onAckHL(p,frame);
+    if(!isLD2410D2(p)) return;
+    dev.countFrame(frame);
+    const s=decLD2410D2(p);
+    Object.assign(dev.state,{present:s.result>0, result:s.result, dist:s.dist, motion:s.motion.map(dB), micro:s.micro.map(dB), mode:'Engineering', raw:`result ${s.result}, ${s.dist} cm`});
+  },
+  onText(dev,l){
+    if(!isLD2410D2Text(l)){ dev.log('Text: '+l); return; }
+    dev.countFrame(l,'text');
+    const s=decLD2410D2Text(l);
+    Object.assign(dev.state,{present:s.present, result:s.present?1:0, dist:s.dist, motion:null, mode:'Normal', raw:l});
+  },
+  render(dev){
+    const s=dev.state;
+    renderPresence(dev,{present:s.present, label:s.present==null?'Waiting for data':(D2_STATES[s.result]||'Someone present'), distCm:s.dist});
+    dev.q('dMode').textContent=s.mode||'—'; dev.q('dRaw').textContent=s.raw||'—'; dev.q('dFw').textContent=s.fw||'—';
+    if(s.motion){
+      renderGates(dev,[...Array(16).keys()].map(String),[...Array(16).keys()].map(i=>`Gate ${i}: ${(i*0.7).toFixed(1)}–${((i+1)*0.7).toFixed(1)} m`),s.motion,s.micro,s.thT,s.thM);
+      dev.q('gatenote').textContent='Energy in the 0–95 scale. Ticks show the trigger and micro-motion thresholds once read from the module.';
+    } else { renderGates(dev,[],[],null); dev.q('gatenote').textContent='Switch Output to engineering mode to see energy for each gate.'; }
+  },
+  demo:DEMO.ld2410d2
+};
+
+/* =====================================================================
+   DRIVER: Ai-Thinker Rd-03D V2 (up to 3 people, x/y)
+   ===================================================================== */
+const RD03D={
+  id:'rd03d', name:'Rd-03D V2', label:'Ai-Thinker Rd-03D V2', what:'24 GHz people tracking', baud:256000, family:'hl',
+  shapes:[SH_FD,SH_RD],
+  sniff:k=>k==='rd',
+  setup(dev,body){
+    body.innerHTML=layout(
+      `<canvas data-k="scope" aria-label="Radar view of tracked people"></canvas>
+       <label>Display range: <span data-k="rangeVal">8</span> m<input type="range" data-k="range" min="2" max="8" step="1" value="8"></label>`,
+      `<div><h4>People tracked</h4><div class="big"><span class="n" data-k="count">—</span><span class="u">of 3</span></div></div>
+       <div><h4>Targets</h4><div data-k="targets"><p class="empty">No one detected.</p></div></div>`,
+      grp('Tracking',`<div class="row"><button data-needs data-k="single">Single target</button><button data-needs data-k="multi">Multi-target (up to 3)</button></div>`,
+        'Single-target mode is the default and is steadier for one person; it is not suitable for tracking several people.')+
+      grp('Module',`<div class="row"><button data-needs data-k="fw">Read firmware</button></div>`));
+    dev.scope=new Scope(dev.q('scope'),()=>dev.dirty=true);
+    dev.q('range').oninput=()=>{ dev.q('rangeVal').textContent=dev.q('range').value; dev.dirty=true; };
+    dev.on('single','Single target',async()=>{ await dev.withConfig(()=>dev.sendHL(0x0080)); dev.log('Single-target mode set.'); });
+    dev.on('multi','Multi-target',async()=>{ await dev.withConfig(()=>dev.sendHL(0x0090)); dev.log('Multi-target mode set.'); });
+    dev.on('fw','Read firmware',()=>dev.withConfig(async()=>dev.log('Firmware reply: '+fwText((await dev.sendHL(0x0000)).data))));
+    refreshButtons(dev);
+  },
+  onFrame(dev,k,p,frame){
+    if(k==='ack') return dev.onAckHL(p,frame);
+    dev.countFrame(frame); dev.state.targets=decRd(p);
+  },
+  render(dev){
+    const t=dev.state.targets||[], cols=['--t1','--t2','--t3'];
+    dev.scope.draw({mode:'fan',fov:60,range:+dev.q('range').value}, t.map(v=>({x:v.x/1000, y:v.y/1000, color:cols[v.id-1], label:`#${v.id} ${(Math.hypot(v.x,v.y)/1000).toFixed(2)} m`})));
+    dev.q('count').textContent=dev.state.targets?t.length:'—';
+    dev.q('targets').innerHTML=t.length?`<div class="tablewrap"><table><thead><tr><th>#</th><th>x</th><th>y</th><th>Distance</th><th>Angle</th><th>Speed</th></tr></thead><tbody>${
+      t.map(v=>{ const ang=Math.atan2(v.x,v.y)*180/Math.PI; return `<tr><td>${v.id}</td><td>${(v.x/1000).toFixed(2)} m</td><td>${(v.y/1000).toFixed(2)} m</td><td>${(Math.hypot(v.x,v.y)/1000).toFixed(2)} m</td><td>${ang>0?'+':''}${ang.toFixed(0)}°</td><td class="${v.speed<0?'dir-a':v.speed>0?'dir-r':''}">${Math.abs(v.speed)} cm/s ${v.speed<0?'toward':v.speed>0?'away':''}</td></tr>`; }).join('')}</tbody></table></div><p class="note">Distance resolution ${t[0].res} mm.</p>`:'<p class="empty">No one detected.</p>';
+  },
+  demo:DEMO.rd03d
+};
+
+/* =====================================================================
+   DRIVER: HLK-LD6004 (60 GHz, 3D positions, TinyFrame protocol)
+   ===================================================================== */
+const L6_SENS=['Low','Medium','High'], L6_TRIG=['Slow','Medium','Fast'], L6_MOUNT=['Ceiling','Wall'];
+const L6_MODE=['Normal detection','Low power when no one is present','Radar off (P20 high)','Radar off (P20 low)','High-reflectivity scene'];
+const L6_PROJ=['General sensing','Respiration','Gesture','Distance','People counting','3D point cloud'];
+const LD6004={
+  id:'ld6004', name:'HLK-LD6004', label:'HLK-LD6004 (3D presence)', what:'60 GHz 3D presence radar', baud:115200, family:'tf',
+  shapes:[SH_TF],
+  sniff:(k,p,m)=>k==='tf'&&TF_TYPES.has(m.type)&&(m.type!==0x0A04&&m.type!==0x0A08||(p.length>=4&&(p.length-4)%20===0)),
+  setup(dev,body){
+    body.innerHTML=layout(
+      `<canvas data-k="scope" aria-label="Radar view of detected people"></canvas>
+       <div class="row"><label class="grow">View<select data-k="viewMode"><option value="wall">Wall-mounted (fan)</option><option value="ceiling">Ceiling-mounted (top-down)</option></select></label>
+       <label class="grow">Display size: <span data-k="rangeVal">6</span> m<input type="range" data-k="range" min="2" max="6" step="1" value="6"></label></div>`,
+      `<div><h4>Detection areas</h4><div class="chips" data-k="areas"><span class="chip">Area 1</span><span class="chip">Area 2</span><span class="chip">Area 3</span><span class="chip">Area 4</span></div></div>
+       <div><h4>People (max 3)</h4><div data-k="targets"><p class="empty">No one detected.</p></div></div>
+       <div><h4>Module</h4><dl class="stats" data-k="stats"></dl></div>`,
+      grp('Detection',`
+        <div class="row">
+          <label class="grow">Sensitivity<select data-k="sens"><option value="0">Low</option><option value="1" selected>Medium</option><option value="2">High</option></select></label>
+          <label class="grow">Trigger speed<select data-k="trig"><option value="0">Slow</option><option value="1" selected>Medium</option><option value="2">Fast</option></select></label>
+          <label class="w90">Hold delay (s)<input type="text" data-k="hold" value="30" inputmode="numeric" class="mono"></label>
+        </div>
+        <div class="row"><button data-needs class="primary" data-k="detApply">Apply</button></div>`,
+        'Hold delay is how long presence is kept after the last detection (default 30 s).')+
+      grp('Installation',`
+        <div class="row">
+          <label class="grow">Mounting<select data-k="mount"><option value="0">Ceiling</option><option value="1">Wall</option></select></label>
+          <label class="w90">Height min (m)<input type="text" data-k="zmin" value="0" inputmode="decimal" class="mono"></label>
+          <label class="w90">Height max (m)<input type="text" data-k="zmax" value="3" inputmode="decimal" class="mono"></label>
+        </div>
+        <div class="row"><button data-needs class="primary" data-k="instApply">Apply</button></div>`,
+        'The height (z) range limits detection to a band of heights.')+
+      grp('Output',`
+        <div class="row"><label class="w120">Report every N frames<input type="text" data-k="interval" value="1" inputmode="numeric" class="mono"></label><button data-needs class="primary" data-k="intApply">Apply</button></div>
+        <div class="row"><button data-needs data-k="tgtOn">Targets on</button><button data-needs data-k="tgtOff">Targets off</button></div>
+        <div class="row"><button data-needs data-k="pcOn">Point cloud on</button><button data-needs data-k="pcOff">Point cloud off</button></div>`,
+        '1 reports every radar frame (fastest).')+
+      grp('Interference zones',`<div class="row"><button data-needs data-k="zAuto">Auto-generate</button><button data-needs data-k="zClear">Clear</button></div>`,
+        'Auto-generate with the room empty: the module marks anything it still sees (fans, curtains) as interference and ignores it.')+
+      grp('Module',`<div class="row"><button data-needs data-k="readAll">Read settings</button><button data-needs data-k="fw">Read firmware</button></div>`));
+    dev.scope=new Scope(dev.q('scope'),()=>dev.dirty=true);
+    dev.q('range').oninput=()=>{ dev.q('rangeVal').textContent=dev.q('range').value; dev.dirty=true; };
+    dev.q('viewMode').onchange=()=>{ dev.dirty=true; };
+    const ctl=c=>dev.sendTF(0x0201,le32(c));
+    dev.on('detApply','Set detection',async()=>{
+      const s=+dev.q('sens').value, t=+dev.q('trig').value, h=dev.num('hold',0,65535,'Hold delay');
+      await ctl(0x0A+s); await ctl(0x0E+t); await dev.sendTF(0x0203,le32(h));
+      Object.assign(dev.state,{sens:s,trig:t,hold:h}); dev.dirty=true;
+      dev.log(`Saved: sensitivity ${L6_SENS[s]}, trigger speed ${L6_TRIG[t]}, hold delay ${h} s`);
+    });
+    dev.on('instApply','Set installation',async()=>{
+      const m=+dev.q('mount').value, zmin=dev.num('zmin',-6,6,'Height min',false), zmax=dev.num('zmax',-6,6,'Height max',false);
+      if(zmax<=zmin) throw new Error('Height max must be above height min');
+      await ctl(m===0?0x13:0x14); await dev.sendTF(0x0204,[...f32b(zmin),...f32b(zmax)]);
+      Object.assign(dev.state,{mount:m,z:[zmin,zmax]}); dev.q('viewMode').value=m===0?'ceiling':'wall'; dev.dirty=true;
+      dev.log(`Saved: ${L6_MOUNT[m].toLowerCase()} mounting, height ${zmin}–${zmax} m`);
+    });
+    dev.on('intApply','Set output interval',async()=>{ const v=dev.num('interval',1,1000,'Interval'); await dev.sendTF(0x0207,le32(v)); dev.state.interval=v; dev.dirty=true; dev.log(`Output every ${v} frame(s).`); });
+    dev.on('tgtOn','Targets on',async()=>{ await ctl(0x08); dev.log('Target output on.'); });
+    dev.on('tgtOff','Targets off',async()=>{ await ctl(0x09); dev.log('Target output off.'); });
+    dev.on('pcOn','Point cloud on',async()=>{ await ctl(0x06); dev.log('Point cloud output on.'); });
+    dev.on('pcOff','Point cloud off',async()=>{ await ctl(0x07); dev.state.points=[]; dev.dirty=true; dev.log('Point cloud output off.'); });
+    dev.on('zAuto','Auto-generate zones',async()=>{ await ctl(0x01); dev.log('Generating interference zones. Keep the room empty.'); });
+    dev.on('zClear','Clear zones',async()=>{ await ctl(0x03); dev.log('Interference zones cleared.'); });
+    dev.on('readAll','Read settings',()=>LD6004.afterConnect(dev));
+    dev.on('fw','Read firmware',async()=>{ await dev.sendTF(0xFFFF); });
+    refreshButtons(dev);
+  },
+  async afterConnect(dev){
+    for(const c of [0x05,0x0D,0x11,0x12,0x15,0x18,0x27]){ try{ await dev.sendTF(0x0201,le32(c)); await sleep(60); }catch(e){ dev.log(e.message,'err'); } }
+    try{ await dev.sendTF(0xFFFF); }catch(e){ dev.log(e.message,'err'); }
+  },
+  onFrame(dev,k,p,frame,m){
+    const t=m.type, s=dev.state;
+    dev.onTF(t,p);
+    if(t===0x0A04){ dev.countFrame(frame); s.targets=decTFTargets(p); return; }
+    if(t===0x0A08){ dev.countFrame(frame,'points'); s.points=decTFTargets(p); return; }
+    if(t===0x0A0A){ dev.countFrame(frame,'areas'); s.areas=[0,1,2,3].map(i=>p.length>=4*(i+1)?u32(p,4*i):0); return; }
+    dev.log('RX  '+hex(frame),'rx');
+    if(!p.length) return;
+    const v32=p.length>=4?u32(p,0):p[0];
+    switch(t){
+      case 0xFFFF: if(p.length>=4){ s.fw=`V${p[1]}.${p[2]}.${p[3]} · ${L6_PROJ[p[0]]||'project '+p[0]}`; dev.log('Firmware '+s.fw); } break;
+      case 0x0A0D: s.hold=v32; dev.q('hold').value=v32; break;
+      case 0x0A0E: s.sens=p[0]; dev.q('sens').value=String(p[0]); break;
+      case 0x0A0F: s.trig=p[0]; dev.q('trig').value=String(p[0]); break;
+      case 0x0A10: if(p.length>=8){ s.z=[f32(p,0),f32(p,4)]; dev.q('zmin').value=+s.z[0].toFixed(2); dev.q('zmax').value=+s.z[1].toFixed(2); } break;
+      case 0x0A11: s.mount=p[0]; dev.q('mount').value=String(p[0]); dev.q('viewMode').value=p[0]===0?'ceiling':'wall'; break;
+      case 0x0A12: s.mode=p[0]; break;
+      case 0x0A13: s.sleep=v32; break;
+      case 0x0A14: s.lowPower=p[0]===0; break;
+      case 0x0A17: s.stay=v32; break;
+      case 0x0A18: s.interval=v32; dev.q('interval').value=v32; break;
+    }
+    dev.dirty=true;
+  },
+  render(dev){
+    const s=dev.state, t=s.targets||[], cols=['--t1','--t2','--t3'], size=+dev.q('range').value;
+    const ceiling=dev.q('viewMode').value==='ceiling';
+    const cfg=ceiling?{mode:'plan',xmin:-size/2,xmax:size/2,ymin:-size/2,ymax:size/2}:{mode:'fan',fov:60,range:size};
+    const items=(s.points||[]).map(v=>({x:v.x,y:v.y,small:true,color:'--muted'}))
+      .concat(t.map((v,i)=>({x:v.x,y:v.y,color:cols[i%3],label:`#${v.id} · z ${v.z.toFixed(1)} m`})));
+    dev.scope.draw(cfg,items);
+    dev.q('areas').innerHTML=[0,1,2,3].map(i=>`<span class="chip${s.areas&&s.areas[i]?' on':''}">Area ${i+1}${s.areas?(s.areas[i]?' · occupied':' · empty'):''}</span>`).join('');
+    dev.q('targets').innerHTML=t.length?`<div class="tablewrap"><table><thead><tr><th>ID</th><th>x</th><th>y</th><th>z</th><th>Distance</th><th>Speed idx</th></tr></thead><tbody>${
+      t.map(v=>`<tr><td>${v.id}</td><td>${v.x.toFixed(2)}</td><td>${v.y.toFixed(2)}</td><td>${v.z.toFixed(2)}</td><td>${Math.hypot(v.x,v.y,v.z).toFixed(2)} m</td><td>${v.dop}</td></tr>`).join('')}</tbody></table></div>`:'<p class="empty">No one detected.</p>';
+    const row=(k,v)=>`<dt>${k}</dt><dd>${v==null?'—':esc(v)}</dd>`;
+    dev.q('stats').innerHTML=row('Firmware',s.fw)+row('Sensitivity',L6_SENS[s.sens])+row('Trigger speed',L6_TRIG[s.trig])+row('Mounting',L6_MOUNT[s.mount])+
+      row('Operating mode',L6_MODE[s.mode])+row('Hold delay',s.hold!=null?s.hold+' s':null)+row('Height range',s.z?`${s.z[0].toFixed(2)} to ${s.z[1].toFixed(2)} m`:null)+row('Report interval',s.interval!=null?`every ${s.interval} frame(s)`:null);
+  },
+  demo:DEMO.ld6004
+};
+
+const DRIVERS=[LD2451, LD2410D1, LD2410D2, RD03D, LD6004];
+const DRIVER_BY_ID=Object.fromEntries(DRIVERS.map(d=>[d.id,d]));
+
+/* ---------- connecting ---------- */
+const parseUuid=s=>{ s=s.trim().toLowerCase().replace(/^0x/,''); if(!s) return null; return /^[0-9a-f]{4}$/.test(s)?parseInt(s,16):s; };
+function updateEmpty(){ $('#emptyState').hidden=devices.size>0; }
+
+async function addSerial(){
+  let port;
+  try{ port=await navigator.serial.requestPort(); }catch(e){ return; }
+  for(const d of devices) if(d.port===port && d.transport){ d.log('This port is already connected on this card.','err'); d.el.scrollIntoView({behavior:'smooth'}); return; }
+  const forced=DRIVER_BY_ID[$('#model').value];
+  const dev=new Device('USB serial'); dev.port=port;
+  try{
+    if(forced){ await dev.openSerial(forced.baud); dev.identify(forced,'Connected as'); return; }
+    for(const baud of [115200,256000]){
+      await dev.openSerial(baud);
+      dev.setStatus('stale',`Listening at ${baud} baud…`); dev.log(`Listening at ${baud} baud…`);
+      if(await dev.waitIdentify(3500)) return;
+      dev.log(`Nothing recognised at ${baud} baud${dev.bad?` (${dev.bad} unreadable frames)`:''}.`);
+      await dev.closeTransport(); dev.buf=new Uint8Array(0); dev.text=''; dev.bad=0; dev.votes={};
+    }
+    dev.baud=null; dev.setSub();
+    dev.showPicker('No data was recognised at 115200 or 256000 baud. The module may be asleep or not sending yet. Choose its model to connect anyway.');
+  }catch(e){ dev.log('Serial: '+e.message,'err'); dev.setStatus('error','Could not open port'); dev.q('close').textContent='Remove'; }
+}
+
+async function addBle(){
+  const svc=parseUuid($('#svc').value)||0xfff0;
+  const optional=[svc,...[0xfff0,0xffe0,0xae00,'6e400001-b5a3-f393-e0a9-e50e24dcca9e'].filter(s=>s!==svc)];
+  const prefix=$('#namePrefix').value.trim();
+  let device;
+  try{ device=await navigator.bluetooth.requestDevice(prefix?{filters:[{namePrefix:prefix}],optionalServices:optional}:{acceptAllDevices:true,optionalServices:optional}); }catch(e){ return; }
+  const dev=new Device('Bluetooth');
+  try{
+    dev.setStatus('stale','Connecting to '+(device.name||'device')+'…');
+    device.addEventListener('gattserverdisconnected',()=>{ if(dev.transport) dev.lost(); });
+    const server=await device.gatt.connect();
+    let service=null;
+    for(const s of optional){ try{ service=await server.getPrimaryService(s); break; }catch{} }
+    if(!service) throw new Error('None of the expected services were found. Check the service UUID in Bluetooth settings.');
+    const chars=await service.getCharacteristics();
+    chars.forEach(c=>{ const p=c.properties; dev.log(`char ${c.uuid}  ${['read','write','writeWithoutResponse','notify','indicate'].filter(k=>p[k]).join(', ')}`); });
+    const want=u=>{ const id=parseUuid(u); if(id==null) return null; const full=BluetoothUUID.getCharacteristic(id); return chars.find(c=>c.uuid===full)||null; };
+    const nC=want($('#notifyUuid').value)||chars.find(c=>c.properties.notify||c.properties.indicate);
+    const wC=want($('#writeUuid').value)||chars.find(c=>c.properties.write||c.properties.writeWithoutResponse);
+    if(!nC||!wC) throw new Error('Could not find both a notify and a write characteristic in that service.');
+    nC.addEventListener('characteristicvaluechanged',e=>{ const v=e.target.value; dev.feed(new Uint8Array(v.buffer,v.byteOffset,v.byteLength).slice()); });
+    await nC.startNotifications();
+    const noResp=!wC.properties.write&&wC.properties.writeWithoutResponse;
+    dev.transport={write:async b=>{ for(let i=0;i<b.length;i+=20){ const part=b.slice(i,i+20); noResp?await wC.writeValueWithoutResponse(part):await wC.writeValueWithResponse(part); } },
+      close:async()=>{ try{ await nC.stopNotifications(); }catch{} device.gatt.disconnect(); }};
+    dev.kind=`Bluetooth · ${device.name||'device'}`; dev.setSub();
+    if($('#sendPass').checked){
+      const pw=Array.from(new TextEncoder().encode($('#blePass').value.padEnd(6,' ').slice(0,6)));
+      try{ await dev.sendHL(0x00A8,pw,2000); dev.log('Bluetooth password accepted.'); }catch(e){ dev.log('No reply to the password command. That is fine if data arrives.'); }
+    }
+    const forced=DRIVER_BY_ID[$('#model').value];
+    if(forced) return dev.identify(forced,'Connected as');
+    dev.setStatus('stale','Listening…');
+    if(!(await dev.waitIdentify(3500))) dev.showPicker('No data was recognised yet. Choose the module\'s model to continue.');
+  }catch(e){ dev.log('Bluetooth: '+e.message,'err'); dev.setStatus('error','Bluetooth failed'); dev.q('close').textContent='Remove'; }
+}
+
+function addDemo(){
+  const d=DRIVER_BY_ID[$('#demoModel').value];
+  const dev=new Device('Demo data');
+  dev.identify(d,'Showing demo data for');
+  const st={};
+  dev.demoTimer=setInterval(()=>dev.feed(d.demo(st)),100);
+  dev.q('close').textContent='Remove';
+}
+
+if('serial' in navigator) navigator.serial.addEventListener('disconnect',e=>{ for(const d of devices) if(d.port===e.target && d.transport) d.lost(); });
+
+/* ---------- status, rate and drawing loop ---------- */
+setInterval(()=>{
+  for(const d of devices){
+    const fps=d.frames-d.lastFrames; d.lastFrames=d.frames;
+    if(d.driver||d.bad) d.q('rate').textContent=`${fps} frames/s · ${d.bad} bad`;
+    if(!d.driver || (!d.transport && !d.demoTimer)) continue;
+    const age=d.lastAt?(performance.now()-d.lastAt)/1000:null;
+    if(age!=null&&age<2.5) d.setStatus('live',d.demoTimer?'Demo data':'Receiving');
+    else d.setStatus('stale',age==null?'Waiting for data':`No data for ${age.toFixed(0)} s`);
+  }
+},1000);
+(function loop(){
+  for(const d of devices) if(d.dirty&&d.driver){ d.dirty=false; try{ d.driver.render(d); }catch(e){ console.error(e); } }
+  requestAnimationFrame(loop);
+})();
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change',()=>devices.forEach(d=>d.dirty=true));
+new MutationObserver(()=>devices.forEach(d=>d.dirty=true)).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
+
+/* ---------- startup ---------- */
+(function init(){
+  $('#model').innerHTML='<option value="">Auto-detect</option>'+DRIVERS.map(d=>`<option value="${d.id}">${esc(d.label)}</option>`).join('');
+  $('#demoModel').innerHTML=DRIVERS.map(d=>`<option value="${d.id}">${esc(d.label)}</option>`).join('');
+  $('#btnSerial').onclick=addSerial; $('#btnBle').onclick=addBle; $('#btnDemo').onclick=addDemo;
+  const msgs=[];
+  if(!window.isSecureContext) msgs.push('Open this page over HTTPS, from localhost, or as a local file for USB serial and Bluetooth to work.');
+  if(!('serial' in navigator)){ msgs.push('USB serial is not available in this browser (use Chrome or Edge on a computer).'); $('#btnSerial').disabled=true; }
+  if(!('bluetooth' in navigator)){ msgs.push('Bluetooth is not available in this browser.'); $('#btnBle').disabled=true; }
+  $('#support').textContent=msgs.length?msgs.join(' '):'USB serial and Bluetooth are both available. Only the HLK-LD2451 has Bluetooth.';
+  if(msgs.length) $('#support').classList.add('warn');
+  updateEmpty();
+})();
+</script>
+</body>
+</html>
