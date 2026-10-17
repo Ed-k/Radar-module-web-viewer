@@ -88,6 +88,7 @@ td{text-align:right;padding:5px 6px;border-bottom:1px solid var(--line);font-fam
 th:first-child,td:first-child{text-align:left}
 td input[type=text]{width:58px;padding:3px 5px;text-align:right}
 .scroll td,.scroll th{padding:4px}
+.zt td,.zt th{padding:3px} .zt td input[type=text]{width:52px}
 .dir-a{color:var(--approach);font-weight:600} .dir-r{color:var(--recede);font-weight:600}
 .empty{color:var(--muted);font-size:.86rem;margin:6px 0}
 .meta{display:flex;flex-wrap:wrap;gap:6px 14px;font:.8rem var(--f-mono);color:var(--muted)}
@@ -129,7 +130,7 @@ dl.stats dt{color:var(--muted)} dl.stats dd{margin:0;font-family:var(--f-mono);t
 <body>
 <div class="wrap">
   <header>
-    <h1>Radar Module Console<small>HLK-LD2451 · HLK-LD2410D · Rd-03D V2 · HLK-LD6004</small></h1>
+    <h1>Radar Module Console<small>HLK-LD2451 · HLK-LD2450 · HLK-LD2410D · Rd-03D V2 · HLK-LD6004</small></h1>
   </header>
 
   <section class="panel">
@@ -148,7 +149,7 @@ dl.stats dt{color:var(--muted)} dl.stats dd{margin:0;font-family:var(--f-mono);t
     </div>
     <p class="note" id="support"></p>
     <details>
-      <summary>Bluetooth settings (HLK-LD2451 only)</summary>
+      <summary>Bluetooth settings (HLK-LD2451 and HLK-LD2450)</summary>
       <div class="adv">
         <label>Name filter (blank = show all)<input type="text" id="namePrefix" value="HLK" class="mono"></label>
         <label>BLE service UUID<input type="text" id="svc" value="fff0" class="mono"></label>
@@ -164,7 +165,7 @@ dl.stats dt{color:var(--muted)} dl.stats dd{margin:0;font-family:var(--f-mono);t
 
   <section class="panel" id="emptyState">
     <h2>No modules connected</h2>
-    <p style="margin:0;max-width:65ch">Connect a radar over USB serial and leave the model on <b>Auto-detect</b>. The page listens to what the module is already sending, works out which model it is, and only then enables that model's settings. You can connect several modules; each gets its own card. To see what a module's card looks like first, add demo data.</p>
+    <p style="margin:0;max-width:65ch">Connect a radar over USB serial and leave the model on <b>Auto-detect</b>. The page listens to what the module is already sending, works out which model it is, and only then enables that model's settings. The HLK-LD2450 and Rd-03D V2 send identical data, so for those two the page also asks for the firmware version, a read-only query, to tell them apart. You can connect several modules; each gets its own card. To see what a module's card looks like first, add demo data.</p>
   </section>
 
   <details class="panel" open>
@@ -175,12 +176,13 @@ dl.stats dt{color:var(--muted)} dl.stats dd{margin:0;font-family:var(--f-mono);t
         <tbody>
           <tr><td>HLK-LD2451</td><td>115200</td><td>5 V, 200 mA or more</td><td>3.3 V</td><td>Yes</td><td>Vehicles, 10–100 m</td></tr>
           <tr><td>HLK-LD2410D</td><td>115200</td><td>3.3 V or 5 V</td><td>3.3 V</td><td>No</td><td>Two firmware protocols; the page detects which one</td></tr>
-          <tr><td>Rd-03D V2</td><td>256000</td><td>5 V, 200 mA or more</td><td>3.3 V</td><td>No</td><td>Ai-Thinker; up to 3 people, 8 m</td></tr>
+          <tr><td>HLK-LD2450</td><td>256000</td><td>5 V, 200 mA or more</td><td>3.3 V</td><td>Yes</td><td>Up to 3 people, 6 m, zone filtering</td></tr>
+          <tr><td>Rd-03D V2</td><td>256000</td><td>5 V, 200 mA or more</td><td>3.3 V</td><td>No</td><td>Ai-Thinker; up to 3 people, 8 m. Same data format as the LD2450.</td></tr>
           <tr><td>HLK-LD6004</td><td>115200</td><td class="warn-cell">3.3 V only, supply of 1 A or more</td><td>3.3 V</td><td>No</td><td>60 GHz, 3D positions. Do not power it from 5 V.</td></tr>
         </tbody>
       </table>
     </div>
-    <p class="note">Connect the adapter's TX to the module's RX and its RX to the module's TX, and share ground. All four use 8 data bits, 1 stop bit, no parity.</p>
+    <p class="note">Connect the adapter's TX to the module's RX and its RX to the module's TX, and share ground. All of them use 8 data bits, 1 stop bit, no parity.</p>
   </details>
 </div>
 
@@ -192,6 +194,7 @@ const hex = a => Array.from(a, b=>b.toString(16).padStart(2,'0').toUpperCase()).
 const h4 = v => v.toString(16).padStart(4,'0').toUpperCase();
 function parseHex(s){ const c=s.replace(/0x/gi,'').replace(/[^0-9a-f]/gi,''); if(c.length%2) throw new Error('Hex needs an even number of digits'); const o=[]; for(let i=0;i<c.length;i+=2) o.push(parseInt(c.slice(i,i+2),16)); return o; }
 const u16=(b,o)=>b[o]|(b[o+1]<<8);
+const s16=(b,o)=>{ const v=u16(b,o); return v&0x8000?v-0x10000:v; };
 const u32=(b,o)=>(b[o]|(b[o+1]<<8)|(b[o+2]<<16)|(b[o+3]<<24))>>>0;
 const le16=v=>[v&255,(v>>8)&255];
 const le32=v=>[v&255,(v>>>8)&255,(v>>>16)&255,(v>>>24)&255];
@@ -315,6 +318,14 @@ function decRd(p){
   }
   return t;
 }
+/* LD2450 zone filtering: type (0 off, 1 detect only inside, 2 ignore inside) + 3 rectangles of plain signed int16 mm */
+function decZones(d){
+  if(d.length<26) return null;
+  const zones=[];
+  for(let i=0;i<3;i++){ const o=2+8*i; zones.push({x1:s16(d,o), y1:s16(d,o+2), x2:s16(d,o+4), y2:s16(d,o+6)}); }
+  return {type:u16(d,0), zones};
+}
+const encZones=(type,zones)=>[...le16(type),...zones.flatMap(z=>[...le16(z.x1),...le16(z.y1),...le16(z.x2),...le16(z.y2)])];
 function decTFTargets(p){
   if(p.length<4) return [];
   const n=i32(p,0), t=[];
@@ -395,7 +406,7 @@ class Scope{
     if('ResizeObserver' in window) new ResizeObserver(()=>{ this.fit(); onResize&&onResize(); }).observe(cv);
   }
   fit(){ const r=this.cv.getBoundingClientRect(), d=window.devicePixelRatio||1; if(r.width<10) return; this.cv.width=Math.round(r.width*d); this.cv.height=Math.round(r.height*d); }
-  draw(cfg, items){
+  draw(cfg, items, rects=[]){
     const asp=cfg.mode==='plan'?1.2:(cfg.fov>=45?1.75:1.45);
     if(this.asp!==asp){ this.asp=asp; this.cv.style.aspectRatio=String(asp); this.fit(); }
     const {cv,ctx}=this, W=cv.width, H=cv.height, d=window.devicePixelRatio||1;
@@ -429,6 +440,14 @@ class Scope{
       ctx.textAlign='center';
       for(const a of angles){ const x=cx+R*Math.sin(rad(a)), y=cy-R*Math.cos(rad(a)); ctx.beginPath(); ctx.moveTo(cx,cy); ctx.lineTo(x,y); ctx.setLineDash(a===0||Math.abs(a)===fov?[]:[3*d,4*d]); ctx.stroke(); ctx.setLineDash([]); ctx.fillText((a>0?'+':'')+a+'°',x,y-6*d); }
       ctx.fillStyle=C('--ink'); ctx.beginPath(); ctx.arc(cx,cy,4*d,0,7); ctx.fill();
+    }
+    for(const r of rects){
+      const [ax,ay]=P(r.x1,r.y1), [bx,by]=P(r.x2,r.y2);
+      const x=Math.min(ax,bx), y=Math.min(ay,by), w=Math.abs(bx-ax), h=Math.abs(by-ay);
+      ctx.fillStyle=C(r.color); ctx.strokeStyle=C(r.color);
+      ctx.globalAlpha=.12; ctx.fillRect(x,y,w,h); ctx.globalAlpha=1;
+      ctx.setLineDash([5*d,4*d]); ctx.lineWidth=1.5*d; ctx.strokeRect(x,y,w,h); ctx.setLineDash([]); ctx.lineWidth=d;
+      if(r.label){ ctx.fillStyle=C(r.color); ctx.font=`600 ${11*d}px ${mono}`; ctx.textAlign='left'; ctx.fillText(r.label,x+4*d,y+13*d); }
     }
     for(const it of items){
       const [x,y]=P(it.x,it.y);
@@ -471,10 +490,23 @@ class Device{
     if(d) scan(this, d.shapes, (k,p,f,m)=>d.onFrame(this,k,p,f,m), d.text?(b=>textLines(this,b,l=>d.onText(this,l))):null);
     else scan(this, SNIFF_SHAPES, (k,p,f,m)=>{
       if(k==='ack'){ this.onAckHL(p,f); return; }
-      for(const dr of DRIVERS) if(dr.sniff && dr.sniff(k,p,m)) this.vote(dr);
-    }, b=>textLines(this,b,l=>{ for(const dr of DRIVERS) if(dr.sniffText && dr.sniffText(l)) this.vote(dr); }));
+      for(const dr of SNIFFERS) if(dr.sniff && dr.sniff(k,p,m)) this.vote(dr);
+    }, b=>textLines(this,b,l=>{ for(const dr of SNIFFERS) if(dr.sniffText && dr.sniffText(l)) this.vote(dr); }));
   }
-  vote(d){ if(this.driver) return; this.votes[d.id]=(this.votes[d.id]||0)+1; if(this.votes[d.id]>=2) this.identify(d); }
+  vote(d){
+    if(this.driver||this.resolving||this.gaveUp) return;
+    this.votes[d.id]=(this.votes[d.id]||0)+1;
+    if(this.votes[d.id]<2) return;
+    if(!d.resolve) return this.identify(d);
+    /* Some data formats are shared by more than one model: ask the module (read-only) which it is. */
+    this.resolving=true; this.setStatus('stale','Asking the module which model it is…');
+    if(this._idRes){ clearTimeout(this._idT); const r=this._idRes; this._idRes=null; r(true); }
+    d.resolve(this).then(found=>{
+      this.resolving=false;
+      if(found) this.identify(found);
+      else { this.gaveUp=true; this.showPicker(d.fallback, d.preselect); }
+    });
+  }
   waitIdentify(ms){ return new Promise(res=>{ this._idRes=res; this._idT=setTimeout(()=>{ this._idRes=null; res(false); },ms); }); }
   identify(d, how='Identified as'){
     if(this.driver) return;
@@ -486,9 +518,18 @@ class Device{
     this.setStatus('stale','Waiting for data');
     if(this.transport && d.afterConnect) this.run('Read settings', ()=>d.afterConnect(this));
   }
-  showPicker(msg){
+  showPicker(msg, preselect){
     const p=this.q('picker'); p.hidden=false; this.q('pickMsg').textContent=msg;
-    this.q('name').textContent='Unknown module'; this.setStatus('error','Not recognised');
+    if(preselect) this.q('pickModel').value=preselect;
+    if(!this.driver){ this.q('name').textContent='Unknown module'; this.setStatus('error','Not recognised'); }
+  }
+  async useModel(d){
+    if(this.driver===d){ this.q('picker').hidden=true; return; }
+    if(this.port && this.baud!==d.baud){ await this.closeTransport(); this.buf=new Uint8Array(0); this.text=''; }
+    if(this.port && !this.transport) await this.openSerial(d.baud);
+    const was=this.driver;
+    if(was){ this.driver=null; this.state={}; this.scope=null; this.q('body').innerHTML=''; this.frames=this.lastFrames=0; this.lastAt=0; }
+    this.identify(d, was?'Switched to':'Connected as');
   }
   async openSerial(baud){
     await this.port.open({baudRate:baud});
@@ -567,7 +608,7 @@ function makeCard(dev){
   el.innerHTML=`
   <div class="card-head">
     <div><h3 class="dev-name" data-k="name">Identifying module…</h3><div class="dev-sub"><span data-k="what"></span> <span data-k="sub"></span></div></div>
-    <div class="row" style="align-items:center"><span class="status" data-k="pill" data-s="stale"><span class="dot"></span><span data-k="status">Connecting…</span></span><span class="rate" data-k="rate"></span><button data-k="close">Disconnect</button></div>
+    <div class="row" style="align-items:center"><span class="status" data-k="pill" data-s="stale"><span class="dot"></span><span data-k="status">Connecting…</span></span><span class="rate" data-k="rate"></span><button data-k="change">Change model</button><button data-k="close">Disconnect</button></div>
   </div>
   <div class="picker" data-k="picker" hidden>
     <p data-k="pickMsg"></p>
@@ -582,11 +623,12 @@ function makeCard(dev){
   </details>`;
   el.querySelector('[data-k="close"]').onclick=()=>dev.remove();
   el.querySelector('[data-k="clear"]').onclick=()=>{ dev.q('log').innerHTML=''; };
-  el.querySelector('[data-k="pickGo"]').onclick=()=>dev.run('Connect', async()=>{
-    const d=DRIVER_BY_ID[dev.q('pickModel').value];
-    if(dev.port && !dev.transport){ await dev.openSerial(d.baud); }
-    dev.identify(d,'Connected as');
-  });
+  el.querySelector('[data-k="pickGo"]').onclick=()=>dev.run('Connect', ()=>dev.useModel(DRIVER_BY_ID[dev.q('pickModel').value]));
+  el.querySelector('[data-k="change"]').onclick=()=>{
+    const p=dev.q('picker');
+    if(!p.hidden && dev.driver){ p.hidden=true; return; }
+    dev.showPicker(dev.driver?'Choose a different model if this one was identified wrongly. The card restarts with that model\'s display and settings.':'Choose the module\'s model.', dev.driver&&dev.driver.id);
+  };
   return el;
 }
 function buildRaw(dev){
@@ -659,12 +701,12 @@ const LD2451={
   setup(dev,body){
     body.innerHTML=layout(
       `<canvas data-k="scope" aria-label="Radar view of detected vehicles"></canvas>
-       <label>Display range: <span data-k="rangeVal">100</span> m<input type="range" data-k="range" min="20" max="100" step="10" value="100"></label>`,
+       <label><span>Display range: <span data-k="rangeVal">100</span> m</span><input type="range" data-k="range" min="20" max="100" step="10" value="100"></label>`,
       `<div><h4>Lead vehicle</h4><div class="big"><span class="n" data-k="leadSpeed">—</span><span class="u">km/h</span></div><div class="meta" data-k="leadMeta">Waiting for data</div></div>
        <div><span class="alarm" data-k="alarm">No approach alarm</span></div>
        <div><h4>Vehicles (max 5)</h4><div data-k="targets"><p class="empty">No vehicles detected.</p></div></div>`,
       grp('Detection',`
-        <label>Maximum distance: <span data-k="maxDistVal">100</span> m<input type="range" data-k="maxDist" min="10" max="100" step="1" value="100"></label>
+        <label><span>Maximum distance: <span data-k="maxDistVal">100</span> m</span><input type="range" data-k="maxDist" min="10" max="100" step="1" value="100"></label>
         <div class="row">
           <label class="grow">Direction<select data-k="dirMode"><option value="1">Approaching only</option><option value="0">Moving away only</option><option value="2">Both directions</option></select></label>
           <label class="w90">Min speed (km/h)<input type="text" data-k="minSpeed" value="5" inputmode="numeric" class="mono"></label>
@@ -674,7 +716,7 @@ const LD2451={
         'Vehicles beyond the maximum distance, slower than the minimum speed, or moving the wrong way are ignored.')+
       grp('Sensitivity',`
         <div class="row">
-          <label class="grow">Trigger count: <span data-k="trigVal">1</span><input type="range" data-k="trigCount" min="1" max="10" step="1" value="1"></label>
+          <label class="grow"><span>Trigger count: <span data-k="trigVal">1</span></span><input type="range" data-k="trigCount" min="1" max="10" step="1" value="1"></label>
           <label class="w120">SNR threshold<select data-k="snrLevel"><option value="0">Default (4)</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option><option>8</option></select></label>
         </div>
         <div class="row"><button data-needs data-k="sensRead">Read from module</button><button data-needs class="primary" data-k="sensApply">Apply</button></div>`,
@@ -843,7 +885,7 @@ const LD2410D2={
          <dt>Output mode</dt><dd data-k="dMode">—</dd><dt>Last report</dt><dd data-k="dRaw">—</dd><dt>Firmware</dt><dd data-k="dFw">—</dd>
        </dl></div>`,
       grp('Detection',`
-        <label>Maximum distance: <span data-k="maxDistVal">10.0</span> m<input type="range" data-k="maxDist" min="0.7" max="10" step="0.1" value="10"></label>
+        <label><span>Maximum distance: <span data-k="maxDistVal">10.0</span> m</span><input type="range" data-k="maxDist" min="0.7" max="10" step="0.1" value="10"></label>
         <label class="w120">Disappearance delay (s)<input type="text" data-k="delay" value="5" inputmode="numeric" class="mono"></label>
         <div class="row"><button data-needs data-k="pRead">Read from module</button><button data-needs class="primary" data-k="pApply">Apply and save</button></div>`,
         'The delay is how long the module waits after the last detection before reporting that no one is present.')+
@@ -943,38 +985,141 @@ const LD2410D2={
 };
 
 /* =====================================================================
+   SHARED: x/y people trackers (Ai-Thinker Rd-03D V2 and HLK-LD2450)
+   Both send the same AA FF 03 00 … 55 CC frame at 256000 baud.
+   ===================================================================== */
+const xyView=maxRange=>`<canvas data-k="scope" aria-label="Radar view of tracked people"></canvas>
+  <label><span>Display range: <span data-k="rangeVal">${maxRange}</span> m</span><input type="range" data-k="range" min="2" max="${maxRange}" step="1" value="${maxRange}"></label>`;
+const xyReadout=`<div><h4>People tracked</h4><div class="big"><span class="n" data-k="count">—</span><span class="u">of 3</span></div><div class="meta" data-k="modeMeta"></div></div>
+  <div><h4>Targets</h4><div data-k="targets"><p class="empty">No one detected.</p></div></div>`;
+function xySetup(dev){
+  dev.scope=new Scope(dev.q('scope'),()=>dev.dirty=true);
+  dev.q('range').oninput=()=>{ dev.q('rangeVal').textContent=dev.q('range').value; dev.dirty=true; };
+}
+function xyRender(dev, rects=[]){
+  const t=dev.state.targets||[], cols=['--t1','--t2','--t3'];
+  dev.scope.draw({mode:'fan',fov:60,range:+dev.q('range').value}, t.map(v=>({x:v.x/1000, y:v.y/1000, color:cols[v.id-1], label:`#${v.id} ${(Math.hypot(v.x,v.y)/1000).toFixed(2)} m`})), rects);
+  dev.q('count').textContent=dev.state.targets?t.length:'—';
+  dev.q('modeMeta').textContent=dev.state.trackMode?`${dev.state.trackMode} mode`:'';
+  dev.q('targets').innerHTML=t.length?`<div class="tablewrap"><table><thead><tr><th>#</th><th>x</th><th>y</th><th>Distance</th><th>Angle</th><th>Speed</th></tr></thead><tbody>${
+    t.map(v=>{ const ang=Math.atan2(v.x,v.y)*180/Math.PI; return `<tr><td>${v.id}</td><td>${(v.x/1000).toFixed(2)} m</td><td>${(v.y/1000).toFixed(2)} m</td><td>${(Math.hypot(v.x,v.y)/1000).toFixed(2)} m</td><td>${ang>0?'+':''}${ang.toFixed(0)}°</td><td class="${v.speed<0?'dir-a':v.speed>0?'dir-r':''}">${Math.abs(v.speed)} cm/s ${v.speed<0?'toward':v.speed>0?'away':''}</td></tr>`; }).join('')}</tbody></table></div><p class="note">Distance gate size ${t[0].res} mm.</p>`:'<p class="empty">No one detected.</p>';
+}
+function xyFrame(dev,k,p,frame){
+  if(k==='ack') return dev.onAckHL(p,frame);
+  dev.countFrame(frame); dev.state.targets=decRd(p);
+}
+
+/* Detection helper: hearing AA FF frames narrows it to these two; a read-only firmware query decides which. */
+const XY_FAMILY={
+  id:'xyfamily', sniff:k=>k==='rd',
+  async resolve(dev){
+    if(!dev.transport) return null;
+    dev.log('This data format is used by both the HLK-LD2450 and the Rd-03D V2. Asking the module for its firmware version to tell them apart.');
+    let found=null;
+    try{
+      await dev.withConfig(async()=>{
+        try{ const r=await dev.sendHL(0x00A0,[],1000); if(r.data.length>=8){ found=LD2450; dev.state.fw=fwHiLink(r.data); } }catch(e){ dev.log('No HLK-LD2450 firmware reply.'); }
+        if(!found){ try{ const r=await dev.sendHL(0x0000,[],1000); found=RD03D; dev.state.fw=fwText(r.data); }catch(e){ dev.log('No Rd-03D firmware reply.'); } }
+      });
+    }catch(e){ dev.log('The module did not accept configuration commands: '+e.message,'err'); }
+    if(found) dev.log(`Firmware ${dev.state.fw}.`);
+    return found;
+  },
+  fallback:'The module sends the data format used by both the HLK-LD2450 and the Rd-03D V2, but did not answer either firmware query. Choose which one it is.',
+  preselect:'ld2450'
+};
+
+/* =====================================================================
    DRIVER: Ai-Thinker Rd-03D V2 (up to 3 people, x/y)
    ===================================================================== */
 const RD03D={
   id:'rd03d', name:'Rd-03D V2', label:'Ai-Thinker Rd-03D V2', what:'24 GHz people tracking', baud:256000, family:'hl',
   shapes:[SH_FD,SH_RD],
-  sniff:k=>k==='rd',
   setup(dev,body){
-    body.innerHTML=layout(
-      `<canvas data-k="scope" aria-label="Radar view of tracked people"></canvas>
-       <label>Display range: <span data-k="rangeVal">8</span> m<input type="range" data-k="range" min="2" max="8" step="1" value="8"></label>`,
-      `<div><h4>People tracked</h4><div class="big"><span class="n" data-k="count">—</span><span class="u">of 3</span></div></div>
-       <div><h4>Targets</h4><div data-k="targets"><p class="empty">No one detected.</p></div></div>`,
+    body.innerHTML=layout(xyView(8), xyReadout,
       grp('Tracking',`<div class="row"><button data-needs data-k="single">Single target</button><button data-needs data-k="multi">Multi-target (up to 3)</button></div>`,
         'Single-target mode is the default and is steadier for one person; it is not suitable for tracking several people.')+
       grp('Module',`<div class="row"><button data-needs data-k="fw">Read firmware</button></div>`));
-    dev.scope=new Scope(dev.q('scope'),()=>dev.dirty=true);
-    dev.q('range').oninput=()=>{ dev.q('rangeVal').textContent=dev.q('range').value; dev.dirty=true; };
-    dev.on('single','Single target',async()=>{ await dev.withConfig(()=>dev.sendHL(0x0080)); dev.log('Single-target mode set.'); });
-    dev.on('multi','Multi-target',async()=>{ await dev.withConfig(()=>dev.sendHL(0x0090)); dev.log('Multi-target mode set.'); });
+    xySetup(dev);
+    dev.on('single','Single target',async()=>{ await dev.withConfig(()=>dev.sendHL(0x0080)); dev.state.trackMode='Single-target'; dev.dirty=true; dev.log('Single-target mode set.'); });
+    dev.on('multi','Multi-target',async()=>{ await dev.withConfig(()=>dev.sendHL(0x0090)); dev.state.trackMode='Multi-target'; dev.dirty=true; dev.log('Multi-target mode set.'); });
     dev.on('fw','Read firmware',()=>dev.withConfig(async()=>dev.log('Firmware reply: '+fwText((await dev.sendHL(0x0000)).data))));
     refreshButtons(dev);
   },
-  onFrame(dev,k,p,frame){
-    if(k==='ack') return dev.onAckHL(p,frame);
-    dev.countFrame(frame); dev.state.targets=decRd(p);
+  onFrame:xyFrame,
+  render:dev=>xyRender(dev),
+  demo:DEMO.rd03d
+};
+
+/* =====================================================================
+   DRIVER: HLK-LD2450 (up to 3 people, x/y, zone filtering, Bluetooth)
+   ===================================================================== */
+const ZONE_TYPES=['Off','Detect only inside the zones','Ignore targets inside the zones'];
+function l50ShowZones(dev,d){
+  const z=decZones(d);
+  if(!z) return dev.log('Zone reply too short: '+hex(d),'err');
+  dev.q('zType').value=String(Math.min(2,z.type));
+  z.zones.forEach((r,i)=>{ ['x1','y1','x2','y2'].forEach(k=>dev.q(`z${i}${k}`).value=+(r[k]/1000).toFixed(3)); });
+  dev.state.zones=z; dev.dirty=true;
+  dev.log(`Zone filtering: ${ZONE_TYPES[z.type]||'type '+z.type}${z.type?', '+z.zones.filter(r=>r.x1||r.y1||r.x2||r.y2).length+' zone(s) set':''}`);
+}
+function l50ShowMode(dev,d){
+  const m=d.length>=2?u16(d,0):0;
+  dev.state.trackMode=m===1?'Single-target':m===2?'Multi-target':null; dev.dirty=true;
+  dev.log(`Tracking mode: ${dev.state.trackMode||'unknown ('+hex(d)+')'}`);
+}
+const LD2450={
+  id:'ld2450', name:'HLK-LD2450', label:'HLK-LD2450 (people tracking)', what:'24 GHz people tracking', baud:256000, family:'hl',
+  shapes:[SH_FD,SH_RD],
+  setup(dev,body){
+    const zrows=[0,1,2].map(i=>`<tr><td>${i+1}</td>${['x1','y1','x2','y2'].map(k=>`<td><input type="text" data-k="z${i}${k}" value="0" class="mono" inputmode="decimal"></td>`).join('')}</tr>`).join('');
+    body.innerHTML=layout(xyView(6), xyReadout,
+      grp('Tracking',`<div class="row"><button data-needs data-k="single">Single target</button><button data-needs data-k="multi">Multi-target (up to 3)</button><button data-needs data-k="mode">Read mode</button></div>`,
+        'Multi-target is the factory default. Single-target is steadier when only one person needs tracking.')+
+      grp('Zone filtering',`
+        <label>Filtering<select data-k="zType"><option value="0">Off</option><option value="1">Detect only inside the zones</option><option value="2">Ignore targets inside the zones</option></select></label>
+        <div class="tablewrap"><table class="zt"><thead><tr><th>Zone</th><th>x1</th><th>y1</th><th>x2</th><th>y2</th></tr></thead><tbody>${zrows}</tbody></table></div>
+        <div class="row"><button data-needs data-k="zRead">Read from module</button><button data-needs class="primary" data-k="zApply">Apply</button></div>`,
+        'Each zone is a rectangle given by two opposite corners, in metres. x is left/right of the sensor, y is distance in front of it. A zone with all corners at 0 is unused. Zones are drawn on the radar view.')+
+      grp('Module',`
+        <div class="row"><button data-needs data-k="fw">Read firmware</button><button data-needs data-k="mac">Read MAC address</button></div>
+        <div class="row"><button data-needs data-k="btOff">Turn Bluetooth off</button><button data-needs data-k="btOn">Turn Bluetooth on</button></div>
+        <div class="row"><button data-needs data-k="restart">Restart</button><button data-needs data-k="factory">Restore factory settings</button></div>`,
+        'Bluetooth and factory-reset changes take effect after a restart. A factory reset sets 256000 baud, Bluetooth on, multi-target tracking and zone filtering off.'));
+    xySetup(dev);
+    dev.on('single','Single target',async()=>{ await dev.withConfig(()=>dev.sendHL(0x0080)); dev.state.trackMode='Single-target'; dev.dirty=true; dev.log('Single-target mode set.'); });
+    dev.on('multi','Multi-target',async()=>{ await dev.withConfig(()=>dev.sendHL(0x0090)); dev.state.trackMode='Multi-target'; dev.dirty=true; dev.log('Multi-target mode set.'); });
+    dev.on('mode','Read mode',()=>dev.withConfig(async()=>l50ShowMode(dev,(await dev.sendHL(0x0091)).data)));
+    dev.on('zRead','Read zones',()=>dev.withConfig(async()=>l50ShowZones(dev,(await dev.sendHL(0x00C1)).data)));
+    dev.on('zApply','Set zones',async()=>{
+      const type=+dev.q('zType').value;
+      const zones=[0,1,2].map(i=>{ const r={}; ['x1','y1','x2','y2'].forEach(k=>r[k]=Math.round(dev.num(`z${i}${k}`,-8,8,`Zone ${i+1} ${k}`,false)*1000)); return r; });
+      await dev.withConfig(()=>dev.sendHL(0x00C2,encZones(type,zones)));
+      dev.state.zones={type,zones}; dev.dirty=true;
+      dev.log(`Zone filtering saved: ${ZONE_TYPES[type]}.`);
+    });
+    dev.on('fw','Read firmware',()=>dev.withConfig(async()=>{ dev.state.fw=fwHiLink((await dev.sendHL(0x00A0)).data); dev.log('Firmware '+dev.state.fw); }));
+    dev.on('mac','Read MAC address',()=>dev.withConfig(async()=>{ const d=(await dev.sendHL(0x00A5,[0x01,0x00])).data; dev.log('MAC address '+[...d].map(b=>b.toString(16).padStart(2,'0').toUpperCase()).join(':')); }));
+    dev.on('btOff','Bluetooth off',async()=>{ await dev.withConfig(()=>dev.sendHL(0x00A4,[0x00,0x00])); dev.log('Bluetooth set to off. Restart to apply.'); });
+    dev.on('btOn','Bluetooth on',async()=>{ await dev.withConfig(()=>dev.sendHL(0x00A4,[0x01,0x00])); dev.log('Bluetooth set to on. Restart to apply.'); });
+    dev.on('restart','Restart',async()=>{ await dev.sendHL(0x00FF,[1,0]); await dev.sendHL(0x00A3).catch(e=>dev.log(e.message,'err')); dev.log('Restart sent.'); });
+    const fb=dev.q('factory');
+    fb.addEventListener('click',()=>{
+      if(!fb.dataset.armed){ fb.dataset.armed='1'; fb.textContent='Click again to reset'; setTimeout(()=>{ delete fb.dataset.armed; fb.textContent='Restore factory settings'; },4000); return; }
+      delete fb.dataset.armed; fb.textContent='Restore factory settings';
+      dev.run('Factory reset',async()=>{ await dev.withConfig(()=>dev.sendHL(0x00A2)); dev.log('Factory settings restored. Restart the module to apply them.'); });
+    });
+    refreshButtons(dev);
   },
+  afterConnect:dev=>dev.withConfig(async()=>{
+    try{ l50ShowMode(dev,(await dev.sendHL(0x0091)).data); }catch(e){ dev.log(e.message,'err'); }
+    try{ l50ShowZones(dev,(await dev.sendHL(0x00C1)).data); }catch(e){ dev.log(e.message,'err'); }
+  }),
+  onFrame:xyFrame,
   render(dev){
-    const t=dev.state.targets||[], cols=['--t1','--t2','--t3'];
-    dev.scope.draw({mode:'fan',fov:60,range:+dev.q('range').value}, t.map(v=>({x:v.x/1000, y:v.y/1000, color:cols[v.id-1], label:`#${v.id} ${(Math.hypot(v.x,v.y)/1000).toFixed(2)} m`})));
-    dev.q('count').textContent=dev.state.targets?t.length:'—';
-    dev.q('targets').innerHTML=t.length?`<div class="tablewrap"><table><thead><tr><th>#</th><th>x</th><th>y</th><th>Distance</th><th>Angle</th><th>Speed</th></tr></thead><tbody>${
-      t.map(v=>{ const ang=Math.atan2(v.x,v.y)*180/Math.PI; return `<tr><td>${v.id}</td><td>${(v.x/1000).toFixed(2)} m</td><td>${(v.y/1000).toFixed(2)} m</td><td>${(Math.hypot(v.x,v.y)/1000).toFixed(2)} m</td><td>${ang>0?'+':''}${ang.toFixed(0)}°</td><td class="${v.speed<0?'dir-a':v.speed>0?'dir-r':''}">${Math.abs(v.speed)} cm/s ${v.speed<0?'toward':v.speed>0?'away':''}</td></tr>`; }).join('')}</tbody></table></div><p class="note">Distance resolution ${t[0].res} mm.</p>`:'<p class="empty">No one detected.</p>';
+    const z=dev.state.zones, col=z&&z.type===1?'--recede':'--approach';
+    const rects=z&&z.type?z.zones.map((r,i)=>({x1:r.x1/1000,y1:r.y1/1000,x2:r.x2/1000,y2:r.y2/1000,color:col,label:`Zone ${i+1}${z.type===2?' (ignored)':''}`})).filter(r=>r.x1||r.y1||r.x2||r.y2):[];
+    xyRender(dev,rects);
   },
   demo:DEMO.rd03d
 };
@@ -993,7 +1138,7 @@ const LD6004={
     body.innerHTML=layout(
       `<canvas data-k="scope" aria-label="Radar view of detected people"></canvas>
        <div class="row"><label class="grow">View<select data-k="viewMode"><option value="wall">Wall-mounted (fan)</option><option value="ceiling">Ceiling-mounted (top-down)</option></select></label>
-       <label class="grow">Display size: <span data-k="rangeVal">6</span> m<input type="range" data-k="range" min="2" max="6" step="1" value="6"></label></div>`,
+       <label class="grow"><span>Display size: <span data-k="rangeVal">6</span> m</span><input type="range" data-k="range" min="2" max="6" step="1" value="6"></label></div>`,
       `<div><h4>Detection areas</h4><div class="chips" data-k="areas"><span class="chip">Area 1</span><span class="chip">Area 2</span><span class="chip">Area 3</span><span class="chip">Area 4</span></div></div>
        <div><h4>People (max 3)</h4><div data-k="targets"><p class="empty">No one detected.</p></div></div>
        <div><h4>Module</h4><dl class="stats" data-k="stats"></dl></div>`,
@@ -1094,7 +1239,8 @@ const LD6004={
   demo:DEMO.ld6004
 };
 
-const DRIVERS=[LD2451, LD2410D1, LD2410D2, RD03D, LD6004];
+const DRIVERS=[LD2451, LD2450, LD2410D1, LD2410D2, RD03D, LD6004];
+const SNIFFERS=[LD2451, LD2410D1, LD2410D2, XY_FAMILY, LD6004];
 const DRIVER_BY_ID=Object.fromEntries(DRIVERS.map(d=>[d.id,d]));
 
 /* ---------- connecting ---------- */
@@ -1196,7 +1342,7 @@ new MutationObserver(()=>devices.forEach(d=>d.dirty=true)).observe(document.docu
   if(!window.isSecureContext) msgs.push('Open this page over HTTPS, from localhost, or as a local file for USB serial and Bluetooth to work.');
   if(!('serial' in navigator)){ msgs.push('USB serial is not available in this browser (use Chrome or Edge on a computer).'); $('#btnSerial').disabled=true; }
   if(!('bluetooth' in navigator)){ msgs.push('Bluetooth is not available in this browser.'); $('#btnBle').disabled=true; }
-  $('#support').textContent=msgs.length?msgs.join(' '):'USB serial and Bluetooth are both available. Only the HLK-LD2451 has Bluetooth.';
+  $('#support').textContent=msgs.length?msgs.join(' '):'USB serial and Bluetooth are both available. Only the HLK-LD2451 and HLK-LD2450 have Bluetooth.';
   if(msgs.length) $('#support').classList.add('warn');
   updateEmpty();
 })();
